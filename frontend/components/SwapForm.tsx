@@ -1,7 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import TokenSelector, { Token } from './TokenSelector';
 import { ethers } from 'ethers';
-import { fetchTokens, fetchPriceQuote, fetchTokenPrices, updateTokensWithPrices } from '../services/tokenService';
+import { 
+  fetchTokens, 
+  fetchPriceQuote, 
+  fetchTokenPrices, 
+  updateTokensWithPrices, 
+  fetchCrossChainPrice,
+  findWrappedToken,
+  findUnwrappedToken
+} from '../services/tokenService';
+import { CrossChainPriceResponse, RouteStep } from '../pages/api/crossChainPrice';
 
 // Default tokens for initial state
 const DEFAULT_TOKENS = {
@@ -56,6 +65,8 @@ const SwapForm = ({ walletAddress }: Props) => {
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const [fee, setFee] = useState({ total: '0', gas: '0', protocol: '0' });
   const [exchangeRate, setExchangeRate] = useState('0');
+  const [routeSteps, setRouteSteps] = useState<RouteStep[]>([]);
+  const [isCrossChain, setIsCrossChain] = useState(false);
   const priceRefreshInterval = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch tokens on component mount
@@ -99,15 +110,21 @@ const SwapForm = ({ walletAddress }: Props) => {
     // Get unique symbols that have CoinGecko IDs
     const uniqueSymbols = new Set<string>();
     tokenList.forEach(token => {
-      const symbol = token.symbol.toLowerCase();
+      const symbol = token.symbol.toLowerCase().replace('u', ''); // Remove 'u' prefix for wrapped tokens
       if (COINGECKO_IDS[symbol] || Object.values(COINGECKO_IDS).includes(symbol)) {
         uniqueSymbols.add(symbol);
       }
     });
     
     // Add source and destination tokens if they exist
-    if (sourceToken?.symbol) uniqueSymbols.add(sourceToken.symbol.toLowerCase());
-    if (destinationToken?.symbol) uniqueSymbols.add(destinationToken.symbol.toLowerCase());
+    if (sourceToken?.symbol) {
+      const symbol = sourceToken.symbol.toLowerCase().replace('u', '');
+      uniqueSymbols.add(symbol);
+    }
+    if (destinationToken?.symbol) {
+      const symbol = destinationToken.symbol.toLowerCase().replace('u', '');
+      uniqueSymbols.add(symbol);
+    }
     
     // Convert to array and fetch prices
     const symbolsToFetch = Array.from(uniqueSymbols);
@@ -159,74 +176,153 @@ const SwapForm = ({ walletAddress }: Props) => {
       if (!sourceToken || !destinationToken || !amount || parseFloat(amount) <= 0) {
         setEstimatedOutput('0');
         setExchangeRate('0');
+        setRouteSteps([]);
+        setIsCrossChain(false);
         return;
       }
 
       setIsLoadingPrice(true);
 
       try {
-        // Convert amount to lamports/wei based on decimals
-        const decimals = sourceToken.decimals;
-        const amountInSmallestUnit = ethers.utils.parseUnits(amount, decimals).toString();
+        // Check if this is a cross-chain swap
+        const isCrossChainSwap = sourceToken.chainId !== destinationToken.chainId;
+        setIsCrossChain(isCrossChainSwap);
         
-        // Get price quote
-        const quote = await fetchPriceQuote(
-          sourceToken.address || '',
-          destinationToken.address || '',
-          amountInSmallestUnit,
-          Math.round(slippage * 100) // Convert to basis points
-        );
-        
-        // Convert output amount from smallest unit to display format
-        const outputDecimals = destinationToken.decimals;
-        const outputAmount = ethers.utils.formatUnits(quote.outAmount, outputDecimals);
-        
-        setEstimatedOutput(outputAmount);
-        setExchangeRate(quote.exchangeRate);
-        
-        // Set fee details
-        const outputValue = parseFloat(outputAmount);
-        setFee({
-          total: (outputValue * 0.003).toFixed(4),
-          gas: (outputValue * 0.001).toFixed(4),
-          protocol: (outputValue * 0.002).toFixed(4),
-        });
-      } catch (error) {
-        console.error('Error fetching price quote:', error);
-        // Fallback to mock calculation
-        let rate = 1;
-        
-        // Use real prices if available
-        if (sourceToken.price && destinationToken.price) {
-          rate = destinationToken.price / sourceToken.price;
+        if (isCrossChainSwap) {
+          // Fetch cross-chain price
+          const crossChainPrice = await fetchCrossChainPrice(sourceToken, destinationToken);
+          
+          // Calculate output amount
+          const inputAmount = parseFloat(amount);
+          const outputAmount = inputAmount * parseFloat(crossChainPrice.exchangeRate);
+          
+          setEstimatedOutput(outputAmount.toFixed(destinationToken.decimals > 6 ? 6 : destinationToken.decimals));
+          setExchangeRate(crossChainPrice.exchangeRate);
+          setRouteSteps(crossChainPrice.route);
+          
+          // Set fee details (mock values for now)
+          const feeAmount = outputAmount * 0.005; // 0.5% fee for cross-chain
+          setFee({
+            total: feeAmount.toFixed(4),
+            gas: (feeAmount * 0.6).toFixed(4), // 60% of fee is gas
+            protocol: (feeAmount * 0.4).toFixed(4), // 40% of fee is protocol fee
+          });
         } else {
-          // Mock rates for demo purposes
-          if (sourceToken.symbol === 'ETH' && destinationToken.symbol === 'USDC') {
-            rate = 2000; // 1 ETH = 2000 USDC
-          } else if (sourceToken.symbol === 'USDC' && destinationToken.symbol === 'ETH') {
-            rate = 0.0005; // 1 USDC = 0.0005 ETH
-          } else if (sourceToken.symbol === 'MATIC' && destinationToken.symbol === 'USDC') {
-            rate = 0.5; // 1 MATIC = 0.5 USDC
-          } else if (sourceToken.symbol === 'AVAX' && destinationToken.symbol === 'USDC') {
-            rate = 10; // 1 AVAX = 10 USDC
+          // For same-chain swaps
+          if (sourceToken.chainId === 999 && destinationToken.chainId === 999) {
+            // Solana tokens - use Jup.ag API
+            const decimals = sourceToken.decimals;
+            const amountInSmallestUnit = ethers.utils.parseUnits(amount, decimals).toString();
+            
+            const quote = await fetchPriceQuote(
+              sourceToken.address || '',
+              destinationToken.address || '',
+              amountInSmallestUnit,
+              Math.round(slippage * 100) // Convert to basis points
+            );
+            
+            const outputDecimals = destinationToken.decimals;
+            const outputAmount = ethers.utils.formatUnits(quote.outAmount, outputDecimals);
+            
+            setEstimatedOutput(outputAmount);
+            setExchangeRate(quote.exchangeRate);
+            setRouteSteps([
+              {
+                fromToken: sourceToken.symbol,
+                fromChain: sourceToken.chainName,
+                toToken: destinationToken.symbol,
+                toChain: destinationToken.chainName,
+                exchangeRate: quote.exchangeRate,
+                type: 'swap'
+              }
+            ]);
+            
+            // Set fee details
+            const outputValue = parseFloat(outputAmount);
+            setFee({
+              total: (outputValue * 0.003).toFixed(4),
+              gas: (outputValue * 0.001).toFixed(4),
+              protocol: (outputValue * 0.002).toFixed(4),
+            });
+          } else {
+            // EVM chain tokens - use price-based calculation
+            let rate = 1;
+            
+            // Use real prices if available
+            if (sourceToken.price && destinationToken.price) {
+              rate = destinationToken.price / sourceToken.price;
+            } else {
+              // Mock rates for demo purposes
+              if (sourceToken.symbol === 'ETH' && destinationToken.symbol === 'USDC') {
+                rate = 2000; // 1 ETH = 2000 USDC
+              } else if (sourceToken.symbol === 'USDC' && destinationToken.symbol === 'ETH') {
+                rate = 0.0005; // 1 USDC = 0.0005 ETH
+              } else if (sourceToken.symbol === 'MATIC' && destinationToken.symbol === 'USDC') {
+                rate = 0.5; // 1 MATIC = 0.5 USDC
+              } else if (sourceToken.symbol === 'AVAX' && destinationToken.symbol === 'USDC') {
+                rate = 10; // 1 AVAX = 10 USDC
+              }
+            }
+
+            const inputAmount = parseFloat(amount);
+            const output = inputAmount * rate;
+            
+            // Apply a mock fee
+            const feeAmount = output * 0.003;
+            const netOutput = output - feeAmount;
+            
+            setEstimatedOutput(netOutput.toFixed(destinationToken.decimals > 6 ? 6 : destinationToken.decimals));
+            setExchangeRate(rate.toString());
+            setRouteSteps([
+              {
+                fromToken: sourceToken.symbol,
+                fromChain: sourceToken.chainName,
+                toToken: destinationToken.symbol,
+                toChain: destinationToken.chainName,
+                exchangeRate: rate.toString(),
+                type: 'swap'
+              }
+            ]);
+            
+            // Set fee details
+            setFee({
+              total: (feeAmount).toFixed(4),
+              gas: (feeAmount * 0.3).toFixed(4),
+              protocol: (feeAmount * 0.7).toFixed(4),
+            });
           }
         }
-
+      } catch (error) {
+        console.error('Error fetching price quote:', error);
+        
+        // Fallback to simple calculation
+        let rate = 1;
+        if (sourceToken.price && destinationToken.price) {
+          rate = destinationToken.price / sourceToken.price;
+        }
+        
         const inputAmount = parseFloat(amount);
         const output = inputAmount * rate;
         
-        // Apply a mock fee
-        const feeAmount = output * 0.003;
-        const netOutput = output - feeAmount;
-        
-        setEstimatedOutput(netOutput.toFixed(destinationToken.decimals > 6 ? 6 : destinationToken.decimals));
+        setEstimatedOutput(output.toFixed(destinationToken.decimals > 6 ? 6 : destinationToken.decimals));
         setExchangeRate(rate.toString());
+        setRouteSteps([
+          {
+            fromToken: sourceToken.symbol,
+            fromChain: sourceToken.chainName,
+            toToken: destinationToken.symbol,
+            toChain: destinationToken.chainName,
+            exchangeRate: rate.toString(),
+            type: 'swap'
+          }
+        ]);
         
         // Set mock fee details
+        const feeAmount = output * 0.003;
         setFee({
-          total: (feeAmount + 0.001 * rate).toFixed(4),
-          gas: (0.001 * rate).toFixed(4),
-          protocol: feeAmount.toFixed(4),
+          total: feeAmount.toFixed(4),
+          gas: (feeAmount * 0.3).toFixed(4),
+          protocol: (feeAmount * 0.7).toFixed(4),
         });
       } finally {
         setIsLoadingPrice(false);
@@ -265,6 +361,7 @@ const SwapForm = ({ walletAddress }: Props) => {
           sourceAddress: walletAddress,
           destinationAddress: walletAddress,
           slippage,
+          route: routeSteps,
         }),
       });
       
@@ -317,6 +414,35 @@ Estimated completion time: ${result.estimatedTime} seconds`);
     }
   };
 
+  // Render route steps
+  const renderRouteSteps = () => {
+    if (!routeSteps.length) return null;
+    
+    return (
+      <div className="mb-6 p-3 bg-background rounded-lg">
+        <div className="text-sm font-medium mb-2">Route</div>
+        {routeSteps.map((step, index) => (
+          <div key={index} className="flex items-center mb-2">
+            <div className="flex-1">
+              <div className="flex items-center">
+                <span className="text-sm">{step.fromToken}</span>
+                <span className="text-xs text-gray-400 ml-1">({step.fromChain})</span>
+                <svg className="h-4 w-4 mx-2 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+                <span className="text-sm">{step.toToken}</span>
+                <span className="text-xs text-gray-400 ml-1">({step.toChain})</span>
+              </div>
+            </div>
+            <div className="text-xs px-2 py-1 rounded bg-surface-light">
+              {step.type === 'bridge' ? 'Bridge' : 'Swap'}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="card max-w-md w-full mx-auto">
       <h2 className="text-center text-2xl font-bold mb-6">Swap Tokens</h2>
@@ -336,6 +462,7 @@ Estimated completion time: ${result.estimatedTime} seconds`);
               tokens={tokens}
               selectedToken={sourceToken}
               onSelect={handleSourceTokenSelect}
+              showChainFilter={true}
             />
             <div className="mt-2">
               <input
@@ -372,6 +499,7 @@ Estimated completion time: ${result.estimatedTime} seconds`);
               tokens={tokens}
               selectedToken={destinationToken}
               onSelect={handleDestinationTokenSelect}
+              showChainFilter={true}
             />
             <div className="mt-2 bg-background rounded-xl border border-surface-light px-4 py-3">
               <div className="text-gray-400 text-sm">Estimated output</div>
@@ -395,6 +523,22 @@ Estimated completion time: ${result.estimatedTime} seconds`);
               )}
             </div>
           </div>
+          
+          {isCrossChain && (
+            <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-center text-yellow-700">
+                <svg className="h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm font-medium">Cross-chain swap</span>
+              </div>
+              <p className="text-xs text-yellow-600 mt-1">
+                This swap will bridge tokens across different blockchains using Universal.xyz wrapped assets.
+              </p>
+            </div>
+          )}
+          
+          {renderRouteSteps()}
           
           <div className="mb-6 p-3 bg-background rounded-lg">
             <div className="flex justify-between text-sm mb-1">

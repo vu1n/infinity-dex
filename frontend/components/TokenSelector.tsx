@@ -12,6 +12,8 @@ export type Token = {
   logoURI?: string;
   price?: number;
   priceChangePercentage24h?: number;
+  wrappedVersion?: string;
+  unwrappedVersion?: string;
 };
 
 type Props = {
@@ -19,13 +21,15 @@ type Props = {
   tokens: Token[];
   selectedToken?: Token;
   onSelect: (token: Token) => void;
+  showChainFilter?: boolean;
 };
 
-const TokenSelector = ({ label, tokens: initialTokens, selectedToken, onSelect }: Props) => {
+const TokenSelector = ({ label, tokens: initialTokens, selectedToken, onSelect, showChainFilter = false }: Props) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [tokens, setTokens] = useState<Token[]>(initialTokens);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedChain, setSelectedChain] = useState<number | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -41,27 +45,43 @@ const TokenSelector = ({ label, tokens: initialTokens, selectedToken, onSelect }
         try {
           // Use API-based search for Solana tokens
           const searchedTokens = await fetchTokens(query);
-          setTokens(searchedTokens);
+          
+          // Apply chain filter if selected
+          const filteredTokens = selectedChain 
+            ? searchedTokens.filter(token => token.chainId === selectedChain)
+            : searchedTokens;
+            
+          setTokens(filteredTokens);
         } catch (error) {
           console.error('Error searching tokens:', error);
           // Fallback to client-side filtering
-          const filtered = initialTokens.filter(
+          let filtered = initialTokens.filter(
             token => 
               token.symbol.toLowerCase().includes(query.toLowerCase()) || 
               token.name.toLowerCase().includes(query.toLowerCase()) ||
               token.chainName.toLowerCase().includes(query.toLowerCase()) ||
               token.address?.toLowerCase().includes(query.toLowerCase())
           );
+          
+          // Apply chain filter if selected
+          if (selectedChain) {
+            filtered = filtered.filter(token => token.chainId === selectedChain);
+          }
+          
           setTokens(filtered);
         } finally {
           setIsLoading(false);
         }
       } else {
         // Reset to initial tokens if query is too short
-        setTokens(initialTokens);
+        const filteredTokens = selectedChain 
+          ? initialTokens.filter(token => token.chainId === selectedChain)
+          : initialTokens;
+          
+        setTokens(filteredTokens);
       }
     }, 300);
-  }, [initialTokens]);
+  }, [initialTokens, selectedChain]);
 
   // Handle search query changes
   useEffect(() => {
@@ -73,6 +93,16 @@ const TokenSelector = ({ label, tokens: initialTokens, selectedToken, onSelect }
       }
     };
   }, [searchQuery, debouncedSearch]);
+
+  // Filter tokens when chain selection changes
+  useEffect(() => {
+    if (selectedChain) {
+      const filtered = initialTokens.filter(token => token.chainId === selectedChain);
+      setTokens(filtered);
+    } else {
+      setTokens(initialTokens);
+    }
+  }, [selectedChain, initialTokens]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -122,6 +152,19 @@ const TokenSelector = ({ label, tokens: initialTokens, selectedToken, onSelect }
   const getPriceChangeColor = (percentage?: number): string => {
     if (percentage === undefined) return 'text-gray-400';
     return percentage >= 0 ? 'text-green-500' : 'text-red-500';
+  };
+
+  // Get unique chains from tokens
+  const getUniqueChains = (): { id: number, name: string }[] => {
+    const chains = new Map<number, string>();
+    
+    initialTokens.forEach(token => {
+      if (!chains.has(token.chainId)) {
+        chains.set(token.chainId, token.chainName);
+      }
+    });
+    
+    return Array.from(chains.entries()).map(([id, name]) => ({ id, name }));
   };
 
   return (
@@ -185,6 +228,26 @@ const TokenSelector = ({ label, tokens: initialTokens, selectedToken, onSelect }
                 autoFocus
               />
             </div>
+            
+            {showChainFilter && (
+              <div className="mb-2 flex flex-wrap gap-1">
+                <button
+                  className={`text-xs px-2 py-1 rounded-lg ${selectedChain === null ? 'bg-primary text-white' : 'bg-background text-gray-500'}`}
+                  onClick={() => setSelectedChain(null)}
+                >
+                  All Chains
+                </button>
+                {getUniqueChains().map(chain => (
+                  <button
+                    key={chain.id}
+                    className={`text-xs px-2 py-1 rounded-lg ${selectedChain === chain.id ? 'bg-primary text-white' : 'bg-background text-gray-500'}`}
+                    onClick={() => setSelectedChain(chain.id)}
+                  >
+                    {chain.name}
+                  </button>
+                ))}
+              </div>
+            )}
             
             {isLoading ? (
               <div className="flex justify-center items-center py-4">

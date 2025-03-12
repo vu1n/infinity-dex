@@ -2,6 +2,8 @@ import axios from 'axios';
 import { Token } from '../components/TokenSelector';
 import { SimplifiedToken } from '../pages/api/tokens';
 import { TokenPrice } from '../pages/api/tokenPrices';
+import { UniversalToken } from '../pages/api/universalTokens';
+import { CrossChainPriceResponse } from '../pages/api/crossChainPrice';
 
 // Convert simplified tokens to our Token format
 export const convertSimplifiedTokenToToken = (token: SimplifiedToken): Token => {
@@ -19,6 +21,24 @@ export const convertSimplifiedTokenToToken = (token: SimplifiedToken): Token => 
   };
 };
 
+// Convert Universal tokens to our Token format
+export const convertUniversalTokenToToken = (token: UniversalToken): Token => {
+  return {
+    symbol: token.symbol,
+    name: token.name,
+    decimals: token.decimals,
+    address: token.address,
+    chainId: token.chainId,
+    chainName: token.chainName,
+    isWrapped: token.isWrapped,
+    logoURI: token.logoURI,
+    price: undefined,
+    priceChangePercentage24h: undefined,
+    wrappedVersion: token.wrappedVersion,
+    unwrappedVersion: token.unwrappedVersion,
+  };
+};
+
 // Fetch all tokens from our API with pagination and search
 export const fetchTokens = async (search?: string): Promise<Token[]> => {
   try {
@@ -28,76 +48,72 @@ export const fetchTokens = async (search?: string): Promise<Token[]> => {
       params.search = search;
     }
     
-    const response = await axios.get<SimplifiedToken[]>('/api/tokens', { params });
-    const simplifiedTokens = response.data;
+    // Fetch Solana tokens
+    const solanaResponse = await axios.get<SimplifiedToken[]>('/api/tokens', { params });
+    const solanaTokens = solanaResponse.data.map(convertSimplifiedTokenToToken);
     
-    // Convert to our Token format
-    const tokens = simplifiedTokens.map(convertSimplifiedTokenToToken);
+    // Fetch Universal.xyz tokens (both wrapped and unwrapped)
+    const universalResponse = await axios.get<UniversalToken[]>('/api/universalTokens', { 
+      params: { 
+        search: search || '' 
+      } 
+    });
+    const universalTokens = universalResponse.data.map(convertUniversalTokenToToken);
     
-    // Add our mock tokens for other chains
-    const mockTokens: Token[] = [
-      {
-        symbol: 'ETH',
-        name: 'Ethereum',
-        decimals: 18,
-        chainId: 1,
-        chainName: 'Ethereum',
-        isWrapped: false,
-        logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/logo.png',
-        price: undefined,
-        priceChangePercentage24h: undefined,
-      },
-      {
-        symbol: 'USDC',
-        name: 'USD Coin',
-        decimals: 6,
-        chainId: 1,
-        chainName: 'Ethereum',
-        isWrapped: false,
-        logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png',
-        price: undefined,
-        priceChangePercentage24h: undefined,
-      },
-      {
-        symbol: 'MATIC',
-        name: 'Polygon',
-        decimals: 18,
-        chainId: 137,
-        chainName: 'Polygon',
-        isWrapped: false,
-        logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0/logo.png',
-        price: undefined,
-        priceChangePercentage24h: undefined,
-      },
-      {
-        symbol: 'USDC',
-        name: 'USD Coin',
-        decimals: 6,
-        chainId: 137,
-        chainName: 'Polygon',
-        isWrapped: false,
-        logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png',
-        price: undefined,
-        priceChangePercentage24h: undefined,
-      },
-      {
-        symbol: 'AVAX',
-        name: 'Avalanche',
-        decimals: 18,
-        chainId: 43114,
-        chainName: 'Avalanche',
-        isWrapped: false,
-        logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/avalanchec/assets/0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7/logo.png',
-        price: undefined,
-        priceChangePercentage24h: undefined,
-      },
-    ];
-    
-    // Combine Jup.ag tokens with our mock tokens
-    return [...tokens, ...mockTokens];
+    // Combine all tokens
+    return [...solanaTokens, ...universalTokens];
   } catch (error) {
     console.error('Error fetching tokens:', error);
     throw error;
+  }
+};
+
+// Fetch tokens by chain
+export const fetchTokensByChain = async (chainId: number, search?: string): Promise<Token[]> => {
+  try {
+    const params: Record<string, string> = {};
+    if (search) {
+      params.search = search;
+    }
+    
+    // For Solana tokens
+    if (chainId === 999) {
+      const response = await axios.get<SimplifiedToken[]>('/api/tokens', { 
+        params: { 
+          ...params,
+          limit: '200'
+        } 
+      });
+      return response.data.map(convertSimplifiedTokenToToken);
+    }
+    
+    // For other chains, use Universal.xyz tokens
+    const response = await axios.get<UniversalToken[]>('/api/universalTokens', { 
+      params: { 
+        ...params,
+        chainId 
+      } 
+    });
+    return response.data.map(convertUniversalTokenToToken);
+  } catch (error) {
+    console.error(`Error fetching tokens for chain ${chainId}:`, error);
+    return [];
+  }
+};
+
+// Fetch wrapped tokens
+export const fetchWrappedTokens = async (search?: string): Promise<Token[]> => {
+  try {
+    const params: Record<string, string> = { wrapped: 'true' };
+    if (search) {
+      params.search = search;
+    }
+    
+    const response = await axios.get<UniversalToken[]>('/api/universalTokens', { params });
+    return response.data.map(convertUniversalTokenToToken);
+  } catch (error) {
+    console.error('Error fetching wrapped tokens:', error);
+    return [];
   }
 };
 
@@ -128,6 +144,47 @@ export const fetchTokenPrices = async (symbols: string[]): Promise<Map<string, T
   }
 };
 
+// Fetch cross-chain price
+export const fetchCrossChainPrice = async (
+  sourceToken: Token,
+  destinationToken: Token,
+): Promise<CrossChainPriceResponse> => {
+  try {
+    const response = await axios.get<CrossChainPriceResponse>('/api/crossChainPrice', {
+      params: {
+        sourceToken: sourceToken.symbol,
+        sourceChain: sourceToken.chainName,
+        destinationToken: destinationToken.symbol,
+        destinationChain: destinationToken.chainName,
+      }
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching cross-chain price:', error);
+    
+    // Return a fallback response
+    return {
+      sourceToken: sourceToken.symbol,
+      sourceChain: sourceToken.chainName,
+      destinationToken: destinationToken.symbol,
+      destinationChain: destinationToken.chainName,
+      exchangeRate: '1',
+      priceImpactPct: 0,
+      route: [
+        {
+          fromToken: sourceToken.symbol,
+          fromChain: sourceToken.chainName,
+          toToken: destinationToken.symbol,
+          toChain: destinationToken.chainName,
+          exchangeRate: '1',
+          type: 'swap'
+        }
+      ]
+    };
+  }
+};
+
 // Update tokens with price data
 export const updateTokensWithPrices = (tokens: Token[], priceMap: Map<string, TokenPrice>): Token[] => {
   return tokens.map(token => {
@@ -141,6 +198,28 @@ export const updateTokensWithPrices = (tokens: Token[], priceMap: Map<string, To
     }
     return token;
   });
+};
+
+// Find the wrapped version of a token
+export const findWrappedToken = (token: Token, tokens: Token[]): Token | undefined => {
+  if (token.wrappedVersion) {
+    return tokens.find(t => 
+      t.symbol === token.wrappedVersion && 
+      t.isWrapped === true
+    );
+  }
+  return undefined;
+};
+
+// Find the unwrapped version of a token
+export const findUnwrappedToken = (token: Token, tokens: Token[]): Token | undefined => {
+  if (token.unwrappedVersion) {
+    return tokens.find(t => 
+      t.symbol === token.unwrappedVersion && 
+      t.isWrapped === false
+    );
+  }
+  return undefined;
 };
 
 // Fetch price quote from our API (which gets it from Jup.ag)
