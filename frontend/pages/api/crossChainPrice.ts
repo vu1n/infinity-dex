@@ -193,8 +193,11 @@ const calculateCrossChainPrice = async (
   
   if (sourceDirectPrice && destDirectPrice) {
     // We can do a direct conversion
-    const exchangeRate = (destDirectPrice / sourceDirectPrice).toString();
-    console.log(`Direct exchange rate: ${exchangeRate}`);
+    // The exchange rate should be how many destination tokens you get for 1 source token
+    // For example, if 1 ETH = $1889 and 1 SOL = $126, then 1 ETH = 15 SOL (approximately)
+    // So the exchange rate should be around 15, not 0.066
+    const exchangeRate = (sourceDirectPrice / destDirectPrice).toString();
+    console.log(`Direct exchange rate (source price / dest price): ${exchangeRate}`);
     
     // Define the route steps
     const route: RouteStep[] = [];
@@ -251,9 +254,6 @@ const calculateCrossChainPrice = async (
     };
   }
   
-  // If direct comparison fails, fall back to using USDC as an intermediary
-  console.log('Direct comparison failed, using USDC as intermediary');
-  
   // Define the route steps
   const route: RouteStep[] = [];
   let currentToken = sourceToken;
@@ -289,8 +289,9 @@ const calculateCrossChainPrice = async (
     console.log(`Step 2: ${tokenToPrice} price: ${sourcePrice}, USDC price: ${usdcPrice}`);
     
     if (sourcePrice && usdcPrice) {
-      const exchangeRate = (usdcPrice / sourcePrice).toString();
-      cumulativeRate *= (usdcPrice / sourcePrice);
+      // Calculate how many USDC you get for 1 source token
+      const exchangeRate = (sourcePrice / usdcPrice).toString();
+      cumulativeRate *= (sourcePrice / usdcPrice);
       
       console.log(`Step 2: Exchange rate ${currentToken} to uUSDC: ${exchangeRate}`);
       
@@ -322,8 +323,9 @@ const calculateCrossChainPrice = async (
       console.log(`Step 3a: USDC price: ${usdcPrice}, ${destinationToken} price: ${destPrice}`);
       
       if (usdcPrice && destPrice) {
-        const exchangeRate = (destPrice / usdcPrice).toString();
-        cumulativeRate *= (destPrice / usdcPrice);
+        // Calculate how many destination tokens you get for 1 USDC
+        const exchangeRate = (usdcPrice / destPrice).toString();
+        cumulativeRate *= (usdcPrice / destPrice);
         
         console.log(`Step 3a: Exchange rate uUSDC to ${wrappedDestToken}: ${exchangeRate}`);
         
@@ -364,8 +366,9 @@ const calculateCrossChainPrice = async (
     console.log(`Step 3 (direct): ${sourceTokenUnwrapped} price: ${sourcePrice}, ${destTokenUnwrapped} price: ${destPrice}`);
     
     if (sourcePrice && destPrice) {
-      const exchangeRate = (destPrice / sourcePrice).toString();
-      cumulativeRate *= (destPrice / sourcePrice);
+      // Calculate how many destination tokens you get for 1 source token
+      const exchangeRate = (sourcePrice / destPrice).toString();
+      cumulativeRate *= (sourcePrice / destPrice);
       
       console.log(`Step 3 (direct): Exchange rate ${currentToken} to ${destinationToken}: ${exchangeRate}`);
       

@@ -199,12 +199,35 @@ const SwapForm = ({ walletAddress }: Props) => {
           // Calculate output amount
           const inputAmount = parseFloat(amount);
           const exchangeRateValue = parseFloat(crossChainPrice.exchangeRate);
-          const outputAmount = inputAmount * exchangeRateValue;
           
-          console.log(`Input: ${inputAmount} ${sourceToken.symbol}, Rate: ${exchangeRateValue}, Output: ${outputAmount} ${destinationToken.symbol}`);
+          // For ETH to SOL, if 1 ETH = $1889 and 1 SOL = $126, then 1 ETH = 15 SOL (approximately)
+          // So the exchange rate should be around 15, not 0.066
+          // The API is returning the ratio of prices (SOL price / ETH price), which is 0.066
+          // But for the exchange rate, we need the inverse: how many SOL you get for 1 ETH
+          
+          let outputAmount;
+          if (sourceToken.price && destinationToken.price) {
+            // If we have prices for both tokens, calculate the correct exchange rate
+            const correctExchangeRate = sourceToken.price / destinationToken.price;
+            console.log(`Corrected exchange rate based on prices: ${correctExchangeRate}`);
+            outputAmount = inputAmount * correctExchangeRate;
+            
+            // Update the exchange rate display
+            setExchangeRate(correctExchangeRate.toFixed(6));
+          } else {
+            // If we don't have prices, use the exchange rate from the API
+            // But for cross-chain swaps, we need to invert it to get the correct output
+            const correctedRate = 1 / exchangeRateValue;
+            console.log(`Corrected exchange rate (inverted): ${correctedRate}`);
+            outputAmount = inputAmount * correctedRate;
+            
+            // Update the exchange rate display
+            setExchangeRate(correctedRate.toFixed(6));
+          }
+          
+          console.log(`Input: ${inputAmount} ${sourceToken.symbol}, Corrected output: ${outputAmount} ${destinationToken.symbol}`);
           
           setEstimatedOutput(outputAmount.toFixed(destinationToken.decimals > 6 ? 6 : destinationToken.decimals));
-          setExchangeRate(crossChainPrice.exchangeRate);
           setRouteSteps(crossChainPrice.route);
           
           // Set fee details (mock values for now)
@@ -263,7 +286,7 @@ const SwapForm = ({ walletAddress }: Props) => {
             
             // Use real prices if available
             if (sourceToken.price && destinationToken.price) {
-              rate = destinationToken.price / sourceToken.price;
+              rate = sourceToken.price / destinationToken.price;
               console.log(`Using real prices - Source: ${sourceToken.symbol} $${sourceToken.price}, Destination: ${destinationToken.symbol} $${destinationToken.price}, Rate: ${rate}`);
             } else {
               // Mock rates for demo purposes
@@ -315,7 +338,7 @@ const SwapForm = ({ walletAddress }: Props) => {
         // Fallback to simple calculation
         let rate = 1;
         if (sourceToken.price && destinationToken.price) {
-          rate = destinationToken.price / sourceToken.price;
+          rate = sourceToken.price / destinationToken.price;
           console.log(`Fallback - Using price-based rate: ${rate}`);
         }
         
