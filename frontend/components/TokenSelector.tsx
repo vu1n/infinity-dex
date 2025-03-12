@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { fetchTokens } from '../services/tokenService';
 
 export type Token = {
   symbol: string;
@@ -18,30 +19,58 @@ type Props = {
   onSelect: (token: Token) => void;
 };
 
-const TokenSelector = ({ label, tokens, selectedToken, onSelect }: Props) => {
+const TokenSelector = ({ label, tokens: initialTokens, selectedToken, onSelect }: Props) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredTokens, setFilteredTokens] = useState<Token[]>(tokens);
+  const [tokens, setTokens] = useState<Token[]>(initialTokens);
+  const [isLoading, setIsLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  // Filter tokens based on search query
-  useEffect(() => {
-    if (!searchQuery) {
-      setFilteredTokens(tokens);
-      return;
+  // Debounced search function
+  const debouncedSearch = useCallback(async (query: string) => {
+    if (searchTimeout.current) {
+      clearTimeout(searchTimeout.current);
     }
 
-    const query = searchQuery.toLowerCase();
-    const filtered = tokens.filter(
-      token => 
-        token.symbol.toLowerCase().includes(query) || 
-        token.name.toLowerCase().includes(query) ||
-        token.chainName.toLowerCase().includes(query) ||
-        token.address?.toLowerCase().includes(query)
-    );
+    searchTimeout.current = setTimeout(async () => {
+      if (query.length >= 2) {
+        setIsLoading(true);
+        try {
+          // Use API-based search for Solana tokens
+          const searchedTokens = await fetchTokens(query);
+          setTokens(searchedTokens);
+        } catch (error) {
+          console.error('Error searching tokens:', error);
+          // Fallback to client-side filtering
+          const filtered = initialTokens.filter(
+            token => 
+              token.symbol.toLowerCase().includes(query.toLowerCase()) || 
+              token.name.toLowerCase().includes(query.toLowerCase()) ||
+              token.chainName.toLowerCase().includes(query.toLowerCase()) ||
+              token.address?.toLowerCase().includes(query.toLowerCase())
+          );
+          setTokens(filtered);
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        // Reset to initial tokens if query is too short
+        setTokens(initialTokens);
+      }
+    }, 300);
+  }, [initialTokens]);
+
+  // Handle search query changes
+  useEffect(() => {
+    debouncedSearch(searchQuery);
     
-    setFilteredTokens(filtered);
-  }, [searchQuery, tokens]);
+    return () => {
+      if (searchTimeout.current) {
+        clearTimeout(searchTimeout.current);
+      }
+    };
+  }, [searchQuery, debouncedSearch]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -61,6 +90,7 @@ const TokenSelector = ({ label, tokens, selectedToken, onSelect }: Props) => {
     onSelect(token);
     setIsOpen(false);
     setSearchQuery('');
+    setTokens(initialTokens);
   };
 
   return (
@@ -117,12 +147,19 @@ const TokenSelector = ({ label, tokens, selectedToken, onSelect }: Props) => {
               />
             </div>
             
-            {filteredTokens.length === 0 ? (
+            {isLoading ? (
+              <div className="flex justify-center items-center py-4">
+                <svg className="animate-spin h-5 w-5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              </div>
+            ) : tokens.length === 0 ? (
               <div className="px-3 py-2 text-gray-400 text-center">
                 No tokens found
               </div>
             ) : (
-              filteredTokens.map((token) => (
+              tokens.map((token) => (
                 <div
                   key={`${token.chainId}-${token.symbol}-${token.address}`}
                   className="px-3 py-2 hover:bg-background rounded-lg cursor-pointer"
@@ -134,6 +171,10 @@ const TokenSelector = ({ label, tokens, selectedToken, onSelect }: Props) => {
                         src={token.logoURI} 
                         alt={token.symbol} 
                         className="w-6 h-6 mr-2 rounded-full" 
+                        onError={(e) => {
+                          // Replace broken image with a placeholder
+                          (e.target as HTMLImageElement).src = 'https://via.placeholder.com/24';
+                        }}
                       />
                     )}
                     <div className="flex-1">

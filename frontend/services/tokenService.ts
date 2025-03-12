@@ -1,30 +1,35 @@
 import axios from 'axios';
 import { Token } from '../components/TokenSelector';
-import { JupToken } from '../pages/api/tokens';
+import { SimplifiedToken } from '../pages/api/tokens';
 
-// Convert Jup.ag tokens to our Token format
-export const convertJupTokenToToken = (jupToken: JupToken): Token => {
+// Convert simplified tokens to our Token format
+export const convertSimplifiedTokenToToken = (token: SimplifiedToken): Token => {
   return {
-    symbol: jupToken.symbol,
-    name: jupToken.name,
-    decimals: jupToken.decimals,
-    address: jupToken.address,
+    symbol: token.symbol,
+    name: token.name,
+    decimals: token.decimals,
+    address: token.address,
     chainId: 999, // Solana chain ID (using 999 as a placeholder)
     chainName: 'Solana',
     isWrapped: false,
-    logoURI: jupToken.logoURI,
+    logoURI: token.logoURI,
   };
 };
 
-// Fetch all tokens from our API (which gets them from Jup.ag)
-export const fetchTokens = async (): Promise<Token[]> => {
+// Fetch all tokens from our API with pagination and search
+export const fetchTokens = async (search?: string): Promise<Token[]> => {
   try {
-    // Fetch Jup.ag tokens
-    const response = await axios.get<JupToken[]>('/api/tokens');
-    const jupTokens = response.data;
+    // Fetch tokens with optional search parameter
+    const params: Record<string, string> = { limit: '200' };
+    if (search) {
+      params.search = search;
+    }
+    
+    const response = await axios.get<SimplifiedToken[]>('/api/tokens', { params });
+    const simplifiedTokens = response.data;
     
     // Convert to our Token format
-    const tokens = jupTokens.map(convertJupTokenToToken);
+    const tokens = simplifiedTokens.map(convertSimplifiedTokenToToken);
     
     // Add our mock tokens for other chains
     const mockTokens: Token[] = [

@@ -3,9 +3,9 @@ import TokenSelector, { Token } from './TokenSelector';
 import { ethers } from 'ethers';
 import { fetchTokens, fetchPriceQuote } from '../services/tokenService';
 
-// Mock tokens for demo purposes
-const MOCK_TOKENS: Token[] = [
-  {
+// Default tokens for initial state
+const DEFAULT_TOKENS = {
+  ETH: {
     symbol: 'ETH',
     name: 'Ethereum',
     decimals: 18,
@@ -14,7 +14,7 @@ const MOCK_TOKENS: Token[] = [
     isWrapped: false,
     logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/logo.png',
   },
-  {
+  USDC: {
     symbol: 'USDC',
     name: 'USD Coin',
     decimals: 6,
@@ -22,35 +22,8 @@ const MOCK_TOKENS: Token[] = [
     chainName: 'Ethereum',
     isWrapped: false,
     logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png',
-  },
-  {
-    symbol: 'MATIC',
-    name: 'Polygon',
-    decimals: 18,
-    chainId: 137,
-    chainName: 'Polygon',
-    isWrapped: false,
-    logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0/logo.png',
-  },
-  {
-    symbol: 'USDC',
-    name: 'USD Coin',
-    decimals: 6,
-    chainId: 137,
-    chainName: 'Polygon',
-    isWrapped: false,
-    logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png',
-  },
-  {
-    symbol: 'AVAX',
-    name: 'Avalanche',
-    decimals: 18,
-    chainId: 43114,
-    chainName: 'Avalanche',
-    isWrapped: false,
-    logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/avalanchec/assets/0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7/logo.png',
-  },
-];
+  }
+};
 
 type Props = {
   walletAddress?: string;
@@ -58,13 +31,14 @@ type Props = {
 
 const SwapForm = ({ walletAddress }: Props) => {
   const [tokens, setTokens] = useState<Token[]>([]);
-  const [sourceToken, setSourceToken] = useState<Token | undefined>();
-  const [destinationToken, setDestinationToken] = useState<Token | undefined>();
+  const [sourceToken, setSourceToken] = useState<Token | undefined>(DEFAULT_TOKENS.ETH);
+  const [destinationToken, setDestinationToken] = useState<Token | undefined>(DEFAULT_TOKENS.USDC);
   const [amount, setAmount] = useState('');
   const [estimatedOutput, setEstimatedOutput] = useState('0');
   const [slippage, setSlippage] = useState(0.5);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingTokens, setIsLoadingTokens] = useState(true);
+  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const [fee, setFee] = useState({ total: '0', gas: '0', protocol: '0' });
   const [exchangeRate, setExchangeRate] = useState('0');
 
@@ -75,19 +49,10 @@ const SwapForm = ({ walletAddress }: Props) => {
         setIsLoadingTokens(true);
         const allTokens = await fetchTokens();
         setTokens(allTokens);
-        
-        // Set default tokens if not already set
-        if (!sourceToken) {
-          const eth = allTokens.find(t => t.symbol === 'ETH' && t.chainId === 1);
-          if (eth) setSourceToken(eth);
-        }
-        
-        if (!destinationToken) {
-          const usdc = allTokens.find(t => t.symbol === 'USDC' && t.chainId === 1);
-          if (usdc) setDestinationToken(usdc);
-        }
       } catch (error) {
         console.error('Failed to fetch tokens:', error);
+        // Set some default tokens if API fails
+        setTokens([DEFAULT_TOKENS.ETH, DEFAULT_TOKENS.USDC]);
       } finally {
         setIsLoadingTokens(false);
       }
@@ -104,6 +69,8 @@ const SwapForm = ({ walletAddress }: Props) => {
         setExchangeRate('0');
         return;
       }
+
+      setIsLoadingPrice(true);
 
       try {
         // Convert amount to lamports/wei based on decimals
@@ -125,7 +92,7 @@ const SwapForm = ({ walletAddress }: Props) => {
         setEstimatedOutput(outputAmount);
         setExchangeRate(quote.exchangeRate);
         
-        // Set mock fee details
+        // Set fee details
         const outputValue = parseFloat(outputAmount);
         setFee({
           total: (outputValue * 0.003).toFixed(4),
@@ -164,6 +131,8 @@ const SwapForm = ({ walletAddress }: Props) => {
           gas: (0.001 * rate).toFixed(4),
           protocol: feeAmount.toFixed(4),
         });
+      } finally {
+        setIsLoadingPrice(false);
       }
     };
 
@@ -285,7 +254,19 @@ Estimated completion time: ${result.estimatedTime} seconds`);
             />
             <div className="mt-2 bg-background rounded-xl border border-surface-light px-4 py-3">
               <div className="text-gray-400 text-sm">Estimated output</div>
-              <div className="text-lg font-medium">{estimatedOutput} {destinationToken?.symbol}</div>
+              <div className="text-lg font-medium flex items-center">
+                {isLoadingPrice ? (
+                  <div className="flex items-center">
+                    <svg className="animate-spin h-4 w-4 mr-2 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Calculating...
+                  </div>
+                ) : (
+                  `${estimatedOutput} ${destinationToken?.symbol}`
+                )}
+              </div>
             </div>
           </div>
           
@@ -327,7 +308,7 @@ Estimated completion time: ${result.estimatedTime} seconds`);
           
           <button
             onClick={handleSwap}
-            disabled={isLoading || !walletAddress || !amount || parseFloat(amount) <= 0}
+            disabled={isLoading || !walletAddress || !amount || parseFloat(amount) <= 0 || isLoadingPrice}
             className="btn-primary w-full"
           >
             {isLoading ? (
@@ -342,6 +323,8 @@ Estimated completion time: ${result.estimatedTime} seconds`);
               'Connect Wallet'
             ) : !amount || parseFloat(amount) <= 0 ? (
               'Enter Amount'
+            ) : isLoadingPrice ? (
+              'Calculating...'
             ) : (
               'Swap'
             )}
