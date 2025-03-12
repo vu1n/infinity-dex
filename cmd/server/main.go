@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/infinity-dex/config"
-	"github.com/infinity-dex/services"
+	"github.com/infinity-dex/services/types"
 	"github.com/infinity-dex/universalsdk"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -278,7 +278,7 @@ func (s *Server) initiateSwapHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create swap request for workflow
-	swapRequest := services.SwapRequest{
+	swapRequest := types.SwapRequest{
 		SourceToken:        sourceToken,
 		DestinationToken:   destToken,
 		Amount:             amount,
@@ -348,7 +348,7 @@ func (s *Server) getSwapStatusHandler(w http.ResponseWriter, r *http.Request) {
 	status := we.WorkflowExecutionInfo.Status.String()
 
 	// If workflow is completed, get the result
-	var result *services.SwapResult
+	var result *types.SwapResult
 	if status == "COMPLETED" {
 		resp := s.temporalClient.GetWorkflow(r.Context(), workflowID, "")
 		if err := resp.Get(r.Context(), &result); err != nil {
@@ -377,39 +377,54 @@ func (s *Server) getSwapStatusHandler(w http.ResponseWriter, r *http.Request) {
 
 // getTokensHandler returns all available tokens
 func (s *Server) getTokensHandler(w http.ResponseWriter, r *http.Request) {
-	// Get all tokens from all chains
-	allTokens := make([]services.Token, 0)
+	// Get chain IDs from query parameters
+	chainIDs := r.URL.Query()["chainId"]
 
-	for chainID := range s.config.Chains {
-		// Convert chain name to int64 ID
-		var chainIDInt int64
+	var allTokens []types.Token
 
-		switch chainID {
-		case "ethereum":
-			chainIDInt = 1
-		case "polygon":
-			chainIDInt = 137
-		case "avalanche":
-			chainIDInt = 43114
-		case "binance":
-			chainIDInt = 56
-		case "solana":
-			chainIDInt = 0
-		default:
-			continue
+	if len(chainIDs) == 0 {
+		// If no chain IDs specified, get tokens for all supported chains
+		for chainName, chainConfig := range s.config.Chains {
+			chainIDInt := chainConfig.ChainID
+			tokens, err := s.universalSDK.GetWrappedTokens(r.Context(), chainIDInt)
+			if err != nil {
+				s.logger.Warnw("Failed to get tokens for chain", "chainName", chainName, "error", err)
+				continue
+			}
+
+			allTokens = append(allTokens, tokens...)
 		}
+	} else {
+		// Get tokens for specified chains
+		for _, chainIDStr := range chainIDs {
+			chainIDInt, err := parseChainID(chainIDStr)
+			if err != nil {
+				s.logger.Warnw("Invalid chain ID", "chainID", chainIDStr, "error", err)
+				continue
+			}
 
-		tokens, err := s.universalSDK.GetWrappedTokens(r.Context(), chainIDInt)
-		if err != nil {
-			s.logger.Warnw("Failed to get tokens for chain", "chainID", chainID, "error", err)
-			continue
+			tokens, err := s.universalSDK.GetWrappedTokens(r.Context(), chainIDInt)
+			if err != nil {
+				s.logger.Warnw("Failed to get tokens for chain", "chainID", chainIDStr, "error", err)
+				continue
+			}
+
+			allTokens = append(allTokens, tokens...)
 		}
-
-		allTokens = append(allTokens, tokens...)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(allTokens)
+}
+
+// parseChainID converts a string chain ID to int64
+func parseChainID(chainID string) (int64, error) {
+	var chainIDInt int64
+	_, err := fmt.Sscanf(chainID, "%d", &chainIDInt)
+	if err != nil {
+		return 0, fmt.Errorf("invalid chain ID format: %s", chainID)
+	}
+	return chainIDInt, nil
 }
 
 // getTokensByChainHandler returns tokens for a specific chain
@@ -447,10 +462,10 @@ func (s *Server) errorResponse(w http.ResponseWriter, message string, statusCode
 }
 
 // findToken finds a token by symbol and chain ID
-func (s *Server) findToken(symbol string, chainID int64) (services.Token, error) {
+func (s *Server) findToken(symbol string, chainID int64) (types.Token, error) {
 	tokens, err := s.universalSDK.GetWrappedTokens(context.Background(), chainID)
 	if err != nil {
-		return services.Token{}, err
+		return types.Token{}, err
 	}
 
 	for _, token := range tokens {
@@ -459,15 +474,15 @@ func (s *Server) findToken(symbol string, chainID int64) (services.Token, error)
 		}
 	}
 
-	return services.Token{}, fmt.Errorf("token %s not found on chain %d", symbol, chainID)
+	return types.Token{}, fmt.Errorf("token %s not found on chain %d", symbol, chainID)
 }
 
 // createMockWrappedTokens creates mock wrapped tokens for testing
-func createMockWrappedTokens(cfg config.Config) map[int64][]services.Token {
-	tokens := make(map[int64][]services.Token)
+func createMockWrappedTokens(cfg config.Config) map[int64][]types.Token {
+	tokens := make(map[int64][]types.Token)
 
 	// Ethereum tokens (Chain ID: 1)
-	tokens[1] = []services.Token{
+	tokens[1] = []types.Token{
 		{
 			Symbol:    "uETH",
 			Name:      "Universal Ethereum",
@@ -507,7 +522,7 @@ func createMockWrappedTokens(cfg config.Config) map[int64][]services.Token {
 	}
 
 	// Polygon tokens (Chain ID: 137)
-	tokens[137] = []services.Token{
+	tokens[137] = []types.Token{
 		{
 			Symbol:    "uMATIC",
 			Name:      "Universal Matic",

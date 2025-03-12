@@ -9,7 +9,7 @@ import (
 
 	"github.com/infinity-dex/activities"
 	"github.com/infinity-dex/config"
-	"github.com/infinity-dex/services"
+	"github.com/infinity-dex/services/types"
 	"github.com/infinity-dex/universalsdk"
 	"github.com/infinity-dex/workflows"
 	"go.temporal.io/sdk/client"
@@ -117,11 +117,11 @@ func main() {
 }
 
 // createMockWrappedTokens creates mock wrapped tokens for testing
-func createMockWrappedTokens(cfg config.Config) map[int64][]services.Token {
-	tokens := make(map[int64][]services.Token)
+func createMockWrappedTokens(cfg config.Config) map[int64][]types.Token {
+	tokens := make(map[int64][]types.Token)
 
 	// Ethereum tokens (Chain ID: 1)
-	tokens[1] = []services.Token{
+	tokens[1] = []types.Token{
 		{
 			Symbol:    "uETH",
 			Name:      "Universal Ethereum",
@@ -161,7 +161,7 @@ func createMockWrappedTokens(cfg config.Config) map[int64][]services.Token {
 	}
 
 	// Polygon tokens (Chain ID: 137)
-	tokens[137] = []services.Token{
+	tokens[137] = []types.Token{
 		{
 			Symbol:    "uMATIC",
 			Name:      "Universal Matic",
