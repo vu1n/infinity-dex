@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/infinity-dex/services"
+	"github.com/infinity-dex/services/types"
 )
 
 // SDK defines the interface for interaction with Universal.xyz
@@ -24,10 +24,10 @@ type SDK interface {
 	TransferToken(ctx context.Context, req TransferRequest) (*TransferResult, error)
 
 	// GetWrappedTokens returns the list of available wrapped tokens
-	GetWrappedTokens(ctx context.Context, chainID int64) ([]services.Token, error)
+	GetWrappedTokens(ctx context.Context, chainID int64) ([]types.Token, error)
 
 	// GetFeeEstimate returns an estimate of the fees for a swap operation
-	GetFeeEstimate(ctx context.Context, req FeeEstimateRequest) (*services.Fee, error)
+	GetFeeEstimate(ctx context.Context, req FeeEstimateRequest) (*types.Fee, error)
 
 	// GetTransactionStatus returns the status of a transaction
 	GetTransactionStatus(ctx context.Context, transactionID string) (*TransactionStatus, error)
@@ -35,50 +35,50 @@ type SDK interface {
 
 // WrapRequest represents a request to wrap a native token
 type WrapRequest struct {
-	SourceToken   services.Token `json:"sourceToken"`
-	Amount        *big.Int       `json:"amount"`
-	SourceAddress string         `json:"sourceAddress"`
-	RefundAddress string         `json:"refundAddress,omitempty"`
+	Token         types.Token `json:"token"`
+	Amount        *big.Int    `json:"amount"`
+	SourceAddress string      `json:"sourceAddress"`
+	TargetAddress string      `json:"targetAddress"`
 }
 
 // WrapResult represents the result of a wrap operation
 type WrapResult struct {
-	TransactionID   string         `json:"transactionId"`
-	WrappedToken    services.Token `json:"wrappedToken"`
-	Amount          *big.Int       `json:"amount"`
-	Fee             services.Fee   `json:"fee"`
-	Status          string         `json:"status"`
-	TransactionHash string         `json:"transactionHash"`
+	TransactionID   string      `json:"transactionId"`
+	WrappedToken    types.Token `json:"wrappedToken"`
+	Amount          *big.Int    `json:"amount"`
+	Fee             types.Fee   `json:"fee"`
+	Status          string      `json:"status"`
+	TransactionHash string      `json:"transactionHash"`
 }
 
 // UnwrapRequest represents a request to unwrap a Universal token
 type UnwrapRequest struct {
-	WrappedToken       services.Token `json:"wrappedToken"`
-	DestinationToken   services.Token `json:"destinationToken"`
-	Amount             *big.Int       `json:"amount"`
-	DestinationAddress string         `json:"destinationAddress"`
-	RefundAddress      string         `json:"refundAddress,omitempty"`
+	WrappedToken       types.Token `json:"wrappedToken"`
+	DestinationToken   types.Token `json:"destinationToken"`
+	Amount             *big.Int    `json:"amount"`
+	DestinationAddress string      `json:"destinationAddress"`
+	RefundAddress      string      `json:"refundAddress,omitempty"`
 }
 
 // UnwrapResult represents the result of an unwrap operation
 type UnwrapResult struct {
-	TransactionID   string         `json:"transactionId"`
-	NativeToken     services.Token `json:"nativeToken"`
-	Amount          *big.Int       `json:"amount"`
-	Fee             services.Fee   `json:"fee"`
-	Status          string         `json:"status"`
-	TransactionHash string         `json:"transactionHash"`
+	TransactionID   string      `json:"transactionId"`
+	NativeToken     types.Token `json:"nativeToken"`
+	Amount          *big.Int    `json:"amount"`
+	Fee             types.Fee   `json:"fee"`
+	Status          string      `json:"status"`
+	TransactionHash string      `json:"transactionHash"`
 }
 
 // TransferRequest represents a request to transfer a Universal token across chains
 type TransferRequest struct {
-	WrappedToken  services.Token `json:"wrappedToken"`
-	SourceChainID int64          `json:"sourceChainId"`
-	DestChainID   int64          `json:"destChainId"`
-	Amount        *big.Int       `json:"amount"`
-	SourceAddress string         `json:"sourceAddress"`
-	DestAddress   string         `json:"destAddress"`
-	RefundAddress string         `json:"refundAddress,omitempty"`
+	WrappedToken  types.Token `json:"wrappedToken"`
+	SourceChainID int64       `json:"sourceChainId"`
+	DestChainID   int64       `json:"destChainId"`
+	Amount        *big.Int    `json:"amount"`
+	SourceAddress string      `json:"sourceAddress"`
+	DestAddress   string      `json:"destAddress"`
+	RefundAddress string      `json:"refundAddress,omitempty"`
 }
 
 // TransferResult represents the result of a transfer operation
@@ -87,16 +87,16 @@ type TransferResult struct {
 	SourceTxHash              string        `json:"sourceTxHash"`
 	DestTxHash                string        `json:"destTxHash,omitempty"`
 	Amount                    *big.Int      `json:"amount"`
-	Fee                       services.Fee  `json:"fee"`
+	Fee                       types.Fee     `json:"fee"`
 	Status                    string        `json:"status"`
 	EstimatedTimeToCompletion time.Duration `json:"estimatedTimeToCompletion"`
 }
 
 // FeeEstimateRequest represents a request for fee estimation
 type FeeEstimateRequest struct {
-	SourceToken      services.Token `json:"sourceToken"`
-	DestinationToken services.Token `json:"destinationToken"`
-	Amount           *big.Int       `json:"amount"`
+	SourceToken      types.Token `json:"sourceToken"`
+	DestinationToken types.Token `json:"destinationToken"`
+	Amount           *big.Int    `json:"amount"`
 }
 
 // TransactionStatus represents the status of a transaction
@@ -118,7 +118,7 @@ type MockUniversalSDK struct {
 
 // MockSDKConfig holds configuration for the mock SDK
 type MockSDKConfig struct {
-	WrappedTokens map[int64][]services.Token
+	WrappedTokens map[int64][]types.Token
 	Latency       time.Duration
 	FailureRate   float64 // 0.0 to 1.0, probability of transaction failure
 }
@@ -145,13 +145,13 @@ func (m *MockUniversalSDK) WrapToken(ctx context.Context, req WrapRequest) (*Wra
 	txHash := fmt.Sprintf("0x%s", uuid.New().String()[:32])
 
 	// Create a wrapped token based on the source token
-	wrappedToken := req.SourceToken
-	wrappedToken.Symbol = "u" + req.SourceToken.Symbol
-	wrappedToken.Name = "Universal " + req.SourceToken.Name
+	wrappedToken := req.Token
+	wrappedToken.Symbol = "u" + req.Token.Symbol
+	wrappedToken.Name = "Universal " + req.Token.Name
 	wrappedToken.IsWrapped = true
 
 	// Mock fee calculation
-	fee := services.Fee{
+	fee := types.Fee{
 		GasFee:      big.NewInt(1000000000000000),
 		ProtocolFee: big.NewInt(500000000000000),
 		NetworkFee:  big.NewInt(200000000000000),
@@ -191,7 +191,7 @@ func (m *MockUniversalSDK) UnwrapToken(ctx context.Context, req UnwrapRequest) (
 	txHash := fmt.Sprintf("0x%s", uuid.New().String()[:32])
 
 	// Mock fee calculation
-	fee := services.Fee{
+	fee := types.Fee{
 		GasFee:      big.NewInt(1200000000000000),
 		ProtocolFee: big.NewInt(600000000000000),
 		NetworkFee:  big.NewInt(300000000000000),
@@ -237,7 +237,7 @@ func (m *MockUniversalSDK) TransferToken(ctx context.Context, req TransferReques
 	}
 
 	// Mock fee calculation
-	fee := services.Fee{
+	fee := types.Fee{
 		GasFee:      big.NewInt(1500000000000000),
 		ProtocolFee: big.NewInt(750000000000000),
 		NetworkFee:  big.NewInt(350000000000000),
@@ -273,7 +273,7 @@ func (m *MockUniversalSDK) TransferToken(ctx context.Context, req TransferReques
 }
 
 // GetWrappedTokens implements the SDK interface for retrieving supported wrapped tokens
-func (m *MockUniversalSDK) GetWrappedTokens(ctx context.Context, chainID int64) ([]services.Token, error) {
+func (m *MockUniversalSDK) GetWrappedTokens(ctx context.Context, chainID int64) ([]types.Token, error) {
 	// Simulate network latency
 	time.Sleep(m.config.Latency / 2) // Faster lookup operation
 
@@ -286,7 +286,7 @@ func (m *MockUniversalSDK) GetWrappedTokens(ctx context.Context, chainID int64) 
 }
 
 // GetFeeEstimate implements the SDK interface for fee estimation
-func (m *MockUniversalSDK) GetFeeEstimate(ctx context.Context, req FeeEstimateRequest) (*services.Fee, error) {
+func (m *MockUniversalSDK) GetFeeEstimate(ctx context.Context, req FeeEstimateRequest) (*types.Fee, error) {
 	// Simulate network latency
 	time.Sleep(m.config.Latency / 2) // Faster lookup operation
 
@@ -328,7 +328,7 @@ func (m *MockUniversalSDK) GetFeeEstimate(ctx context.Context, req FeeEstimateRe
 	totalFeeETHFloat, _ := totalFeeETH.Float64()
 	totalFeeUSD = totalFeeETHFloat * ethToUSD
 
-	return &services.Fee{
+	return &types.Fee{
 		GasFee:      gasFee,
 		ProtocolFee: protocolFee,
 		NetworkFee:  networkFee,
