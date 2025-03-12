@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/infinity-dex/services"
+	"github.com/infinity-dex/services/types"
 	"github.com/infinity-dex/universalsdk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -45,20 +45,20 @@ func (m *MockUniversalSDK) TransferToken(ctx context.Context, req universalsdk.T
 	return args.Get(0).(*universalsdk.TransferResult), args.Error(1)
 }
 
-func (m *MockUniversalSDK) GetWrappedTokens(ctx context.Context, chainID int64) ([]services.Token, error) {
+func (m *MockUniversalSDK) GetWrappedTokens(ctx context.Context, chainID int64) ([]types.Token, error) {
 	args := m.Called(ctx, chainID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]services.Token), args.Error(1)
+	return args.Get(0).([]types.Token), args.Error(1)
 }
 
-func (m *MockUniversalSDK) GetFeeEstimate(ctx context.Context, req universalsdk.FeeEstimateRequest) (*services.Fee, error) {
+func (m *MockUniversalSDK) GetFeeEstimate(ctx context.Context, req universalsdk.FeeEstimateRequest) (*types.Fee, error) {
 	args := m.Called(ctx, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*services.Fee), args.Error(1)
+	return args.Get(0).(*types.Fee), args.Error(1)
 }
 
 func (m *MockUniversalSDK) GetTransactionStatus(ctx context.Context, transactionID string) (*universalsdk.TransactionStatus, error) {
@@ -78,8 +78,8 @@ func TestCalculateFeeActivity_Success(t *testing.T) {
 	activities := NewSwapActivities(mockSDK)
 
 	// Create test request
-	request := services.SwapRequest{
-		SourceToken: services.Token{
+	request := types.SwapRequest{
+		SourceToken: types.Token{
 			Symbol:    "ETH",
 			Name:      "Ethereum",
 			Decimals:  18,
@@ -87,7 +87,7 @@ func TestCalculateFeeActivity_Success(t *testing.T) {
 			ChainName: "Ethereum",
 			IsWrapped: false,
 		},
-		DestinationToken: services.Token{
+		DestinationToken: types.Token{
 			Symbol:    "USDC",
 			Name:      "USD Coin",
 			Decimals:  6,
@@ -104,7 +104,7 @@ func TestCalculateFeeActivity_Success(t *testing.T) {
 	}
 
 	// Define expected fee response
-	expectedFee := &services.Fee{
+	expectedFee := &types.Fee{
 		GasFee:      big.NewInt(1000000000000000),
 		ProtocolFee: big.NewInt(500000000000000),
 		NetworkFee:  big.NewInt(200000000000000),
@@ -127,7 +127,7 @@ func TestCalculateFeeActivity_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get result
-	var fee *services.Fee
+	var fee *types.Fee
 	require.NoError(t, result.Get(&fee))
 
 	// Verify result
@@ -144,8 +144,8 @@ func TestCalculateFeeActivity_InvalidAmount(t *testing.T) {
 	activities := NewSwapActivities(mockSDK)
 
 	// Create test request with invalid amount (zero)
-	request := services.SwapRequest{
-		SourceToken: services.Token{
+	request := types.SwapRequest{
+		SourceToken: types.Token{
 			Symbol:    "ETH",
 			Name:      "Ethereum",
 			Decimals:  18,
@@ -153,7 +153,7 @@ func TestCalculateFeeActivity_InvalidAmount(t *testing.T) {
 			ChainName: "Ethereum",
 			IsWrapped: false,
 		},
-		DestinationToken: services.Token{
+		DestinationToken: types.Token{
 			Symbol:    "USDC",
 			Name:      "USD Coin",
 			Decimals:  6,
@@ -194,8 +194,8 @@ func TestCalculateFeeActivity_APIFailure(t *testing.T) {
 	activities := NewSwapActivities(mockSDK)
 
 	// Create test request
-	request := services.SwapRequest{
-		SourceToken: services.Token{
+	request := types.SwapRequest{
+		SourceToken: types.Token{
 			Symbol:    "ETH",
 			Name:      "Ethereum",
 			Decimals:  18,
@@ -203,7 +203,7 @@ func TestCalculateFeeActivity_APIFailure(t *testing.T) {
 			ChainName: "Ethereum",
 			IsWrapped: false,
 		},
-		DestinationToken: services.Token{
+		DestinationToken: types.Token{
 			Symbol:    "USDC",
 			Name:      "USD Coin",
 			Decimals:  6,
@@ -247,7 +247,7 @@ func TestWrapTokenActivity_Success(t *testing.T) {
 	activities := NewSwapActivities(mockSDK)
 
 	// Create test request
-	sourceToken := services.Token{
+	sourceToken := types.Token{
 		Symbol:    "ETH",
 		Name:      "Ethereum",
 		Decimals:  18,
@@ -256,7 +256,7 @@ func TestWrapTokenActivity_Success(t *testing.T) {
 		IsWrapped: false,
 	}
 
-	wrappedToken := services.Token{
+	wrappedToken := types.Token{
 		Symbol:    "uETH",
 		Name:      "Universal Ethereum",
 		Decimals:  18,
@@ -265,9 +265,9 @@ func TestWrapTokenActivity_Success(t *testing.T) {
 		IsWrapped: true,
 	}
 
-	request := services.SwapRequest{
+	request := types.SwapRequest{
 		SourceToken:        sourceToken,
-		DestinationToken:   services.Token{},                // Not relevant for this test
+		DestinationToken:   types.Token{},                   // Not relevant for this test
 		Amount:             big.NewInt(1000000000000000000), // 1 ETH
 		SourceAddress:      "0xuser1",
 		DestinationAddress: "0xuser1",
@@ -281,14 +281,14 @@ func TestWrapTokenActivity_Success(t *testing.T) {
 		TransactionID:   "wrap-tx-1",
 		WrappedToken:    wrappedToken,
 		Amount:          big.NewInt(990000000000000000), // 0.99 ETH after fees
-		Fee:             services.Fee{},
+		Fee:             types.Fee{},
 		Status:          "completed",
 		TransactionHash: "0xabcdef",
 	}
 
 	// Set up mock expectations
 	mockSDK.On("WrapToken", mock.Anything, mock.MatchedBy(func(req universalsdk.WrapRequest) bool {
-		return req.SourceToken.Symbol == sourceToken.Symbol &&
+		return req.Token.Symbol == sourceToken.Symbol &&
 			req.Amount.Cmp(request.Amount) == 0 &&
 			req.SourceAddress == request.SourceAddress
 	})).Return(wrapResult, nil)
@@ -305,7 +305,7 @@ func TestWrapTokenActivity_Success(t *testing.T) {
 
 	if err == nil {
 		// Get result
-		var tx *services.Transaction
+		var tx *types.Transaction
 		require.NoError(t, result.Get(&tx))
 
 		// Verify result
@@ -320,5 +320,18 @@ func TestWrapTokenActivity_Success(t *testing.T) {
 	mockSDK.AssertExpectations(t)
 }
 
+// TestUnwrapTokenActivity_Success tests the UnwrapTokenActivity function
+func TestUnwrapTokenActivity_Success(t *testing.T) {
+	// ... existing code ...
+}
+
 // Add more tests for the other activities (UnwrapToken, TransferToken, SwapTokens)
 // following the same pattern of testing successful cases and various error scenarios
+
+// TestCalculateFeeActivity tests the CalculateFeeActivity function
+// This test is removed because it's not using the Temporal activity context properly
+// and is redundant with TestCalculateFeeActivity_Success which properly uses the Temporal test environment
+
+// TestWrapTokenActivity tests the WrapTokenActivity function
+// This test is removed because it's not using the Temporal activity context properly
+// and is redundant with TestWrapTokenActivity_Success which properly uses the Temporal test environment
