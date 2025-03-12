@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import TokenSelector, { Token } from './TokenSelector';
 import { ethers } from 'ethers';
-import { fetchTokens, fetchPriceQuote } from '../services/tokenService';
+import { fetchTokens, fetchPriceQuote, fetchTokenPrices, updateTokensWithPrices } from '../services/tokenService';
 
 // Default tokens for initial state
 const DEFAULT_TOKENS = {
@@ -25,6 +25,21 @@ const DEFAULT_TOKENS = {
   }
 };
 
+// Map token symbols to CoinGecko IDs for price fetching
+const COINGECKO_IDS: Record<string, string> = {
+  'ETH': 'ethereum',
+  'USDC': 'usd-coin',
+  'MATIC': 'matic-network',
+  'AVAX': 'avalanche-2',
+  'SOL': 'solana',
+  'BTC': 'bitcoin',
+  'USDT': 'tether',
+  'DAI': 'dai',
+  'BONK': 'bonk',
+  'JUP': 'jupiter',
+  'RAY': 'raydium',
+};
+
 type Props = {
   walletAddress?: string;
 };
@@ -41,6 +56,7 @@ const SwapForm = ({ walletAddress }: Props) => {
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const [fee, setFee] = useState({ total: '0', gas: '0', protocol: '0' });
   const [exchangeRate, setExchangeRate] = useState('0');
+  const priceRefreshInterval = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch tokens on component mount
   useEffect(() => {
@@ -49,6 +65,9 @@ const SwapForm = ({ walletAddress }: Props) => {
         setIsLoadingTokens(true);
         const allTokens = await fetchTokens();
         setTokens(allTokens);
+        
+        // Fetch initial prices for default tokens
+        await refreshTokenPrices(allTokens);
       } catch (error) {
         console.error('Failed to fetch tokens:', error);
         // Set some default tokens if API fails
@@ -59,7 +78,80 @@ const SwapForm = ({ walletAddress }: Props) => {
     };
     
     getTokens();
+    
+    // Set up interval for refreshing prices
+    priceRefreshInterval.current = setInterval(() => {
+      refreshTokenPrices(tokens);
+    }, 10000); // 10 seconds
+    
+    // Clean up interval on unmount
+    return () => {
+      if (priceRefreshInterval.current) {
+        clearInterval(priceRefreshInterval.current);
+      }
+    };
   }, []);
+
+  // Refresh token prices
+  const refreshTokenPrices = async (tokenList: Token[]) => {
+    if (!tokenList.length) return;
+    
+    // Get unique symbols that have CoinGecko IDs
+    const uniqueSymbols = new Set<string>();
+    tokenList.forEach(token => {
+      const symbol = token.symbol.toLowerCase();
+      if (COINGECKO_IDS[symbol] || Object.values(COINGECKO_IDS).includes(symbol)) {
+        uniqueSymbols.add(symbol);
+      }
+    });
+    
+    // Add source and destination tokens if they exist
+    if (sourceToken?.symbol) uniqueSymbols.add(sourceToken.symbol.toLowerCase());
+    if (destinationToken?.symbol) uniqueSymbols.add(destinationToken.symbol.toLowerCase());
+    
+    // Convert to array and fetch prices
+    const symbolsToFetch = Array.from(uniqueSymbols);
+    const coinGeckoIds = symbolsToFetch.map(symbol => COINGECKO_IDS[symbol] || symbol);
+    
+    try {
+      const priceMap = await fetchTokenPrices(coinGeckoIds);
+      if (priceMap.size > 0) {
+        // Update tokens with prices
+        const updatedTokens = updateTokensWithPrices(tokenList, priceMap);
+        setTokens(updatedTokens);
+        
+        // Update source and destination tokens if they exist
+        if (sourceToken) {
+          const updatedSourceToken = updatedTokens.find(
+            t => t.symbol === sourceToken.symbol && t.chainId === sourceToken.chainId
+          );
+          if (updatedSourceToken) {
+            setSourceToken(updatedSourceToken);
+          }
+        }
+        
+        if (destinationToken) {
+          const updatedDestToken = updatedTokens.find(
+            t => t.symbol === destinationToken.symbol && t.chainId === destinationToken.chainId
+          );
+          if (updatedDestToken) {
+            setDestinationToken(updatedDestToken);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing token prices:', error);
+    }
+  };
+
+  // Handle token selection
+  const handleSourceTokenSelect = (token: Token) => {
+    setSourceToken(token);
+  };
+  
+  const handleDestinationTokenSelect = (token: Token) => {
+    setDestinationToken(token);
+  };
 
   // Fetch price quote when inputs change
   useEffect(() => {
@@ -104,15 +196,20 @@ const SwapForm = ({ walletAddress }: Props) => {
         // Fallback to mock calculation
         let rate = 1;
         
-        // Mock rates for demo purposes
-        if (sourceToken.symbol === 'ETH' && destinationToken.symbol === 'USDC') {
-          rate = 2000; // 1 ETH = 2000 USDC
-        } else if (sourceToken.symbol === 'USDC' && destinationToken.symbol === 'ETH') {
-          rate = 0.0005; // 1 USDC = 0.0005 ETH
-        } else if (sourceToken.symbol === 'MATIC' && destinationToken.symbol === 'USDC') {
-          rate = 0.5; // 1 MATIC = 0.5 USDC
-        } else if (sourceToken.symbol === 'AVAX' && destinationToken.symbol === 'USDC') {
-          rate = 10; // 1 AVAX = 10 USDC
+        // Use real prices if available
+        if (sourceToken.price && destinationToken.price) {
+          rate = destinationToken.price / sourceToken.price;
+        } else {
+          // Mock rates for demo purposes
+          if (sourceToken.symbol === 'ETH' && destinationToken.symbol === 'USDC') {
+            rate = 2000; // 1 ETH = 2000 USDC
+          } else if (sourceToken.symbol === 'USDC' && destinationToken.symbol === 'ETH') {
+            rate = 0.0005; // 1 USDC = 0.0005 ETH
+          } else if (sourceToken.symbol === 'MATIC' && destinationToken.symbol === 'USDC') {
+            rate = 0.5; // 1 MATIC = 0.5 USDC
+          } else if (sourceToken.symbol === 'AVAX' && destinationToken.symbol === 'USDC') {
+            rate = 10; // 1 AVAX = 10 USDC
+          }
         }
 
         const inputAmount = parseFloat(amount);
@@ -201,6 +298,25 @@ Estimated completion time: ${result.estimatedTime} seconds`);
     setAmount(estimatedOutput);
   };
 
+  // Format USD value
+  const formatUsdValue = (amount: string, token?: Token): string => {
+    if (!token || !token.price || !amount || parseFloat(amount) <= 0) {
+      return '≈ $0.00';
+    }
+    
+    const value = parseFloat(amount) * token.price;
+    
+    if (value < 0.01) {
+      return `≈ $${value.toFixed(6)}`;
+    } else if (value < 1) {
+      return `≈ $${value.toFixed(4)}`;
+    } else if (value < 1000) {
+      return `≈ $${value.toFixed(2)}`;
+    } else {
+      return `≈ $${value.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+    }
+  };
+
   return (
     <div className="card max-w-md w-full mx-auto">
       <h2 className="text-center text-2xl font-bold mb-6">Swap Tokens</h2>
@@ -219,7 +335,7 @@ Estimated completion time: ${result.estimatedTime} seconds`);
               label="From"
               tokens={tokens}
               selectedToken={sourceToken}
-              onSelect={setSourceToken}
+              onSelect={handleSourceTokenSelect}
             />
             <div className="mt-2">
               <input
@@ -230,6 +346,11 @@ Estimated completion time: ${result.estimatedTime} seconds`);
                 className="input mt-2"
                 disabled={isLoading}
               />
+              {amount && parseFloat(amount) > 0 && sourceToken?.price && (
+                <div className="text-sm text-gray-400 mt-1 pl-2">
+                  {formatUsdValue(amount, sourceToken)}
+                </div>
+              )}
             </div>
           </div>
           
@@ -250,7 +371,7 @@ Estimated completion time: ${result.estimatedTime} seconds`);
               label="To"
               tokens={tokens}
               selectedToken={destinationToken}
-              onSelect={setDestinationToken}
+              onSelect={handleDestinationTokenSelect}
             />
             <div className="mt-2 bg-background rounded-xl border border-surface-light px-4 py-3">
               <div className="text-gray-400 text-sm">Estimated output</div>
@@ -267,6 +388,11 @@ Estimated completion time: ${result.estimatedTime} seconds`);
                   `${estimatedOutput} ${destinationToken?.symbol}`
                 )}
               </div>
+              {estimatedOutput && parseFloat(estimatedOutput) > 0 && destinationToken?.price && (
+                <div className="text-sm text-gray-400 mt-1">
+                  {formatUsdValue(estimatedOutput, destinationToken)}
+                </div>
+              )}
             </div>
           </div>
           
