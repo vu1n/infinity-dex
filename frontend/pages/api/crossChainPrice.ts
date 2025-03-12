@@ -178,6 +178,82 @@ const calculateCrossChainPrice = async (
   
   console.log(`Cross-chain swap - Source wrapped: ${isSourceWrapped}, Destination wrapped: ${isDestWrapped}`);
   
+  // Try direct price comparison first (more efficient)
+  // This avoids going through USDC as an intermediary when not needed
+  const sourceTokenUnwrapped = isSourceWrapped ? sourceToken.substring(1) : sourceToken;
+  const destTokenUnwrapped = isDestWrapped ? destinationToken.substring(1) : destinationToken;
+  
+  console.log(`Trying direct price comparison between ${sourceTokenUnwrapped} and ${destTokenUnwrapped}`);
+  
+  const directPriceMap = await getTokenPrices([sourceTokenUnwrapped, destTokenUnwrapped]);
+  const sourceDirectPrice = directPriceMap.get(sourceTokenUnwrapped.toLowerCase());
+  const destDirectPrice = directPriceMap.get(destTokenUnwrapped.toLowerCase());
+  
+  console.log(`Direct comparison - Source price: ${sourceDirectPrice}, Destination price: ${destDirectPrice}`);
+  
+  if (sourceDirectPrice && destDirectPrice) {
+    // We can do a direct conversion
+    const exchangeRate = (destDirectPrice / sourceDirectPrice).toString();
+    console.log(`Direct exchange rate: ${exchangeRate}`);
+    
+    // Define the route steps
+    const route: RouteStep[] = [];
+    
+    // Step 1: If source is not wrapped, wrap it
+    if (!isSourceWrapped) {
+      const wrappedToken = `u${sourceToken}`;
+      route.push({
+        fromToken: sourceToken,
+        fromChain: sourceChain,
+        toToken: wrappedToken,
+        toChain: 'Universal',
+        exchangeRate: '1', // 1:1 wrapping
+        type: 'bridge'
+      });
+      console.log(`Step 1: Wrapped ${sourceToken} to ${wrappedToken}`);
+    }
+    
+    // Step 2: Direct swap between wrapped tokens
+    const sourceWrappedToken = isSourceWrapped ? sourceToken : `u${sourceToken}`;
+    const destWrappedToken = isDestWrapped ? destinationToken : `u${destinationToken}`;
+    
+    route.push({
+      fromToken: sourceWrappedToken,
+      fromChain: 'Universal',
+      toToken: destWrappedToken,
+      toChain: 'Universal',
+      exchangeRate,
+      type: 'swap'
+    });
+    console.log(`Step 2: Direct swap from ${sourceWrappedToken} to ${destWrappedToken} at rate ${exchangeRate}`);
+    
+    // Step 3: If destination is not wrapped, unwrap it
+    if (!isDestWrapped) {
+      route.push({
+        fromToken: `u${destinationToken}`,
+        fromChain: 'Universal',
+        toToken: destinationToken,
+        toChain: destinationChain,
+        exchangeRate: '1', // 1:1 unwrapping
+        type: 'bridge'
+      });
+      console.log(`Step 3: Unwrapped u${destinationToken} to ${destinationToken}`);
+    }
+    
+    return {
+      sourceToken,
+      sourceChain,
+      destinationToken,
+      destinationChain,
+      exchangeRate,
+      priceImpactPct: 0.3, // Mock value
+      route
+    };
+  }
+  
+  // If direct comparison fails, fall back to using USDC as an intermediary
+  console.log('Direct comparison failed, using USDC as intermediary');
+  
   // Define the route steps
   const route: RouteStep[] = [];
   let currentToken = sourceToken;
