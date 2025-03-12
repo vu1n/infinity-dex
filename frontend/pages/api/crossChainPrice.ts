@@ -88,6 +88,8 @@ const getTokenPrices = async (symbols: string[]): Promise<Map<string, number>> =
     const protocol = host.includes('localhost') ? 'http' : 'https';
     const baseUrl = `${protocol}://${host}`;
     
+    console.log(`Fetching prices for symbols: ${symbols.join(', ')}`);
+    
     const response = await axios.get(`${baseUrl}/api/tokenPrices`, {
       params: { symbols: symbols.join(',') }
     });
@@ -95,9 +97,13 @@ const getTokenPrices = async (symbols: string[]): Promise<Map<string, number>> =
     const priceMap = new Map<string, number>();
     const prices: TokenPrice[] = response.data;
     
+    console.log('Received prices:', JSON.stringify(prices, null, 2));
+    
     prices.forEach(price => {
       priceMap.set(price.symbol.toLowerCase(), price.current_price);
     });
+    
+    console.log('Price map:', Object.fromEntries(priceMap));
     
     return priceMap;
   } catch (error) {
@@ -116,6 +122,8 @@ const getTokenPrices = async (symbols: string[]): Promise<Map<string, number>> =
       }
     });
     
+    console.log('Using fallback prices:', Object.fromEntries(priceMap));
+    
     return priceMap;
   }
 };
@@ -127,6 +135,8 @@ const calculateCrossChainPrice = async (
   destinationToken: string,
   destinationChain: string
 ): Promise<CrossChainPriceResponse> => {
+  console.log(`Calculating price from ${sourceToken} (${sourceChain}) to ${destinationToken} (${destinationChain})`);
+  
   // Check if it's a direct swap on the same chain
   if (sourceChain === destinationChain) {
     // Get token prices
@@ -134,8 +144,11 @@ const calculateCrossChainPrice = async (
     const sourcePrice = priceMap.get(sourceToken.toLowerCase());
     const destPrice = priceMap.get(destinationToken.toLowerCase());
     
+    console.log(`Direct swap - Source price: ${sourcePrice}, Destination price: ${destPrice}`);
+    
     if (sourcePrice && destPrice) {
       const exchangeRate = (destPrice / sourcePrice).toString();
+      console.log(`Exchange rate: ${exchangeRate}`);
       
       return {
         sourceToken,
@@ -163,6 +176,8 @@ const calculateCrossChainPrice = async (
   const isSourceWrapped = sourceToken.startsWith('u');
   const isDestWrapped = destinationToken.startsWith('u');
   
+  console.log(`Cross-chain swap - Source wrapped: ${isSourceWrapped}, Destination wrapped: ${isDestWrapped}`);
+  
   // Define the route steps
   const route: RouteStep[] = [];
   let currentToken = sourceToken;
@@ -182,18 +197,26 @@ const calculateCrossChainPrice = async (
     });
     currentToken = wrappedToken;
     currentChain = 'Universal';
+    console.log(`Step 1: Wrapped ${sourceToken} to ${currentToken}`);
   }
   
   // Step 2: If we need to go through a common denominator (USDC)
   if (currentToken !== 'uUSDC' && !isDestWrapped) {
     // Get token prices for rate calculation
-    const priceMap = await getTokenPrices([currentToken.replace('u', ''), 'USDC']);
-    const sourcePrice = priceMap.get(currentToken.replace('u', '').toLowerCase());
+    const tokenToPrice = currentToken.replace('u', '');
+    console.log(`Step 2: Getting prices for ${tokenToPrice} and USDC`);
+    
+    const priceMap = await getTokenPrices([tokenToPrice, 'USDC']);
+    const sourcePrice = priceMap.get(tokenToPrice.toLowerCase());
     const usdcPrice = priceMap.get('usdc');
+    
+    console.log(`Step 2: ${tokenToPrice} price: ${sourcePrice}, USDC price: ${usdcPrice}`);
     
     if (sourcePrice && usdcPrice) {
       const exchangeRate = (usdcPrice / sourcePrice).toString();
       cumulativeRate *= (usdcPrice / sourcePrice);
+      
+      console.log(`Step 2: Exchange rate ${currentToken} to uUSDC: ${exchangeRate}`);
       
       route.push({
         fromToken: currentToken,
@@ -213,14 +236,20 @@ const calculateCrossChainPrice = async (
     if (currentToken === 'uUSDC') {
       const wrappedDestToken = `u${destinationToken}`;
       
+      console.log(`Step 3a: Getting prices for USDC and ${destinationToken}`);
+      
       // Get token prices for rate calculation
       const priceMap = await getTokenPrices(['USDC', destinationToken]);
       const usdcPrice = priceMap.get('usdc');
       const destPrice = priceMap.get(destinationToken.toLowerCase());
       
+      console.log(`Step 3a: USDC price: ${usdcPrice}, ${destinationToken} price: ${destPrice}`);
+      
       if (usdcPrice && destPrice) {
         const exchangeRate = (destPrice / usdcPrice).toString();
         cumulativeRate *= (destPrice / usdcPrice);
+        
+        console.log(`Step 3a: Exchange rate uUSDC to ${wrappedDestToken}: ${exchangeRate}`);
         
         route.push({
           fromToken: 'uUSDC',
@@ -235,6 +264,8 @@ const calculateCrossChainPrice = async (
     }
     
     // Unwrap to destination token
+    console.log(`Step 3b: Unwrapping ${currentToken} to ${destinationToken}`);
+    
     route.push({
       fromToken: currentToken,
       fromChain: 'Universal',
@@ -245,13 +276,22 @@ const calculateCrossChainPrice = async (
     });
   } else if (isDestWrapped) {
     // Direct swap to wrapped destination token
-    const priceMap = await getTokenPrices([currentToken.replace('u', ''), destinationToken.replace('u', '')]);
-    const sourcePrice = priceMap.get(currentToken.replace('u', '').toLowerCase());
-    const destPrice = priceMap.get(destinationToken.replace('u', '').toLowerCase());
+    const sourceTokenUnwrapped = currentToken.replace('u', '');
+    const destTokenUnwrapped = destinationToken.replace('u', '');
+    
+    console.log(`Step 3 (direct): Getting prices for ${sourceTokenUnwrapped} and ${destTokenUnwrapped}`);
+    
+    const priceMap = await getTokenPrices([sourceTokenUnwrapped, destTokenUnwrapped]);
+    const sourcePrice = priceMap.get(sourceTokenUnwrapped.toLowerCase());
+    const destPrice = priceMap.get(destTokenUnwrapped.toLowerCase());
+    
+    console.log(`Step 3 (direct): ${sourceTokenUnwrapped} price: ${sourcePrice}, ${destTokenUnwrapped} price: ${destPrice}`);
     
     if (sourcePrice && destPrice) {
       const exchangeRate = (destPrice / sourcePrice).toString();
       cumulativeRate *= (destPrice / sourcePrice);
+      
+      console.log(`Step 3 (direct): Exchange rate ${currentToken} to ${destinationToken}: ${exchangeRate}`);
       
       route.push({
         fromToken: currentToken,
@@ -266,6 +306,7 @@ const calculateCrossChainPrice = async (
   
   // Calculate the overall exchange rate
   const overallExchangeRate = cumulativeRate.toString();
+  console.log(`Overall exchange rate: ${overallExchangeRate}`);
   
   return {
     sourceToken,
@@ -299,6 +340,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     // Use cached price if available and not expired
     if (cache && now - cache.timestamp < CACHE_DURATION && cache.prices[cacheKey]) {
+      console.log(`Using cached price for ${sourceToken} to ${destinationToken}`);
       return res.status(200).json(cache.prices[cacheKey]);
     }
     

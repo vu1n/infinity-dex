@@ -182,19 +182,26 @@ const SwapForm = ({ walletAddress }: Props) => {
       }
 
       setIsLoadingPrice(true);
+      console.log(`Getting price quote for ${amount} ${sourceToken.symbol} to ${destinationToken.symbol}`);
 
       try {
         // Check if this is a cross-chain swap
         const isCrossChainSwap = sourceToken.chainId !== destinationToken.chainId;
         setIsCrossChain(isCrossChainSwap);
+        console.log(`Is cross-chain swap: ${isCrossChainSwap}`);
         
         if (isCrossChainSwap) {
           // Fetch cross-chain price
+          console.log(`Fetching cross-chain price for ${sourceToken.symbol} to ${destinationToken.symbol}`);
           const crossChainPrice = await fetchCrossChainPrice(sourceToken, destinationToken);
+          console.log('Cross-chain price response:', crossChainPrice);
           
           // Calculate output amount
           const inputAmount = parseFloat(amount);
-          const outputAmount = inputAmount * parseFloat(crossChainPrice.exchangeRate);
+          const exchangeRateValue = parseFloat(crossChainPrice.exchangeRate);
+          const outputAmount = inputAmount * exchangeRateValue;
+          
+          console.log(`Input: ${inputAmount} ${sourceToken.symbol}, Rate: ${exchangeRateValue}, Output: ${outputAmount} ${destinationToken.symbol}`);
           
           setEstimatedOutput(outputAmount.toFixed(destinationToken.decimals > 6 ? 6 : destinationToken.decimals));
           setExchangeRate(crossChainPrice.exchangeRate);
@@ -214,6 +221,8 @@ const SwapForm = ({ walletAddress }: Props) => {
             const decimals = sourceToken.decimals;
             const amountInSmallestUnit = ethers.utils.parseUnits(amount, decimals).toString();
             
+            console.log(`Fetching Jup.ag price quote for ${amount} ${sourceToken.symbol} (${amountInSmallestUnit} lamports) to ${destinationToken.symbol}`);
+            
             const quote = await fetchPriceQuote(
               sourceToken.address || '',
               destinationToken.address || '',
@@ -221,8 +230,12 @@ const SwapForm = ({ walletAddress }: Props) => {
               Math.round(slippage * 100) // Convert to basis points
             );
             
+            console.log('Jup.ag price quote:', quote);
+            
             const outputDecimals = destinationToken.decimals;
             const outputAmount = ethers.utils.formatUnits(quote.outAmount, outputDecimals);
+            
+            console.log(`Output amount: ${outputAmount} ${destinationToken.symbol}, Exchange rate: ${quote.exchangeRate}`);
             
             setEstimatedOutput(outputAmount);
             setExchangeRate(quote.exchangeRate);
@@ -251,6 +264,7 @@ const SwapForm = ({ walletAddress }: Props) => {
             // Use real prices if available
             if (sourceToken.price && destinationToken.price) {
               rate = destinationToken.price / sourceToken.price;
+              console.log(`Using real prices - Source: ${sourceToken.symbol} $${sourceToken.price}, Destination: ${destinationToken.symbol} $${destinationToken.price}, Rate: ${rate}`);
             } else {
               // Mock rates for demo purposes
               if (sourceToken.symbol === 'ETH' && destinationToken.symbol === 'USDC') {
@@ -262,10 +276,13 @@ const SwapForm = ({ walletAddress }: Props) => {
               } else if (sourceToken.symbol === 'AVAX' && destinationToken.symbol === 'USDC') {
                 rate = 10; // 1 AVAX = 10 USDC
               }
+              console.log(`Using mock rate for ${sourceToken.symbol} to ${destinationToken.symbol}: ${rate}`);
             }
 
             const inputAmount = parseFloat(amount);
             const output = inputAmount * rate;
+            
+            console.log(`Input: ${inputAmount} ${sourceToken.symbol}, Rate: ${rate}, Output: ${output} ${destinationToken.symbol}`);
             
             // Apply a mock fee
             const feeAmount = output * 0.003;
@@ -299,10 +316,13 @@ const SwapForm = ({ walletAddress }: Props) => {
         let rate = 1;
         if (sourceToken.price && destinationToken.price) {
           rate = destinationToken.price / sourceToken.price;
+          console.log(`Fallback - Using price-based rate: ${rate}`);
         }
         
         const inputAmount = parseFloat(amount);
         const output = inputAmount * rate;
+        
+        console.log(`Fallback - Input: ${inputAmount} ${sourceToken.symbol}, Rate: ${rate}, Output: ${output} ${destinationToken.symbol}`);
         
         setEstimatedOutput(output.toFixed(destinationToken.decimals > 6 ? 6 : destinationToken.decimals));
         setExchangeRate(rate.toString());
