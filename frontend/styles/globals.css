@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 17, 24, 39;
+  --background-end-rgb: 10, 15, 24;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      rgb(var(--background-start-rgb)),
+      rgb(var(--background-end-rgb))
+    )
+    fixed;
+}
+
+@layer base {
+  h1 {
+    @apply text-3xl font-bold mb-4;
+  }
+  h2 {
+    @apply text-2xl font-bold mb-3;
+  }
+  h3 {
+    @apply text-xl font-bold mb-2;
+  }
+  a {
+    @apply text-primary hover:text-primary-light transition-colors;
+  }
+  button {
+    @apply rounded-xl transition-all duration-200;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-surface p-6 rounded-2xl shadow-card;
+  }
+  .input {
+    @apply bg-background rounded-xl border border-surface-light px-4 py-3 
+           focus:outline-none focus:ring-2 focus:ring-primary w-full;
+  }
+  .btn-primary {
+    @apply bg-primary hover:bg-primary-dark text-white font-semibold 
+           px-6 py-3 rounded-xl shadow-md hover:shadow-lg transition-all;
+  }
+  .btn-secondary {
+    @apply bg-secondary hover:bg-secondary-dark text-white font-semibold 
+           px-6 py-3 rounded-xl shadow-md hover:shadow-lg transition-all;
+  }
+  .btn-outline {
+    @apply border border-surface-light hover:border-primary text-white 
+           font-semibold px-6 py-3 rounded-xl transition-all;
+  }
+} 
