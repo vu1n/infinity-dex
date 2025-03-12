@@ -3,7 +3,7 @@ package workflows
 import (
 	"time"
 
-	"github.com/infinity-dex/services"
+	"github.com/infinity-dex/services/types"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -14,12 +14,12 @@ import (
 // 2. Transfer Universal asset to destination chain if cross-chain
 // 3. Swap Universal asset to destination token if needed
 // 4. Unwrap Universal asset to native token if needed
-func SwapWorkflow(ctx workflow.Context, request services.SwapRequest) (*services.SwapResult, error) {
+func SwapWorkflow(ctx workflow.Context, request types.SwapRequest) (*types.SwapResult, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("SwapWorkflow started", "requestID", request.RequestID)
 
 	// Initialize result object
-	result := &services.SwapResult{
+	result := &types.SwapResult{
 		RequestID:   request.RequestID,
 		Success:     false,
 		InputAmount: request.Amount,
@@ -38,7 +38,7 @@ func SwapWorkflow(ctx workflow.Context, request services.SwapRequest) (*services
 	ctx = workflow.WithActivityOptions(ctx, options)
 
 	// 1. Calculate fee estimate and check if swap is viable
-	var feeResult *services.Fee
+	var feeResult *types.Fee
 	err := workflow.ExecuteActivity(ctx, "CalculateFeeActivity", request).Get(ctx, &feeResult)
 	if err != nil {
 		logger.Error("Failed to calculate fees", "error", err)
@@ -48,12 +48,12 @@ func SwapWorkflow(ctx workflow.Context, request services.SwapRequest) (*services
 
 	// 2. Check if source token needs to be wrapped
 	var sourceWrapped bool
-	var wrappedSourceToken services.Token
+	var wrappedSourceToken types.Token
 
 	if !request.SourceToken.IsWrapped {
 		logger.Info("Wrapping source token", "token", request.SourceToken.Symbol)
 
-		var wrapResult *services.Transaction
+		var wrapResult *types.Transaction
 		err = workflow.ExecuteActivity(ctx, "WrapTokenActivity", request).Get(ctx, &wrapResult)
 		if err != nil {
 			logger.Error("Failed to wrap source token", "error", err)
@@ -77,7 +77,7 @@ func SwapWorkflow(ctx workflow.Context, request services.SwapRequest) (*services
 			"sourceChain", request.SourceToken.ChainName,
 			"destChain", request.DestinationToken.ChainName)
 
-		var transferResult *services.Transaction
+		var transferResult *types.Transaction
 		err = workflow.ExecuteActivity(ctx, "TransferTokenActivity",
 			wrappedSourceToken,
 			request.SourceToken.ChainID,
@@ -91,7 +91,7 @@ func SwapWorkflow(ctx workflow.Context, request services.SwapRequest) (*services
 
 			// If source was wrapped, we need to try to unwrap it back
 			if sourceWrapped {
-				var unwrapResult *services.Transaction
+				var unwrapResult *types.Transaction
 				// Best effort unwrap to return funds to user, ignore errors
 				_ = workflow.ExecuteActivity(ctx, "UnwrapTokenActivity",
 					wrappedSourceToken,
@@ -115,7 +115,7 @@ func SwapWorkflow(ctx workflow.Context, request services.SwapRequest) (*services
 			"sourceToken", wrappedSourceToken.Symbol,
 			"destToken", request.DestinationToken.Symbol)
 
-		var swapResult *services.Transaction
+		var swapResult *types.Transaction
 
 		// Determine the amount to use based on whether this is a cross-chain swap
 		var amountToSwap = request.Amount
@@ -152,7 +152,7 @@ func SwapWorkflow(ctx workflow.Context, request services.SwapRequest) (*services
 	if request.DestinationToken.IsWrapped == false && result.DestinationTx.DestToken.IsWrapped {
 		logger.Info("Unwrapping destination token", "token", result.DestinationTx.DestToken.Symbol)
 
-		var unwrapResult *services.Transaction
+		var unwrapResult *types.Transaction
 		err = workflow.ExecuteActivity(ctx, "UnwrapTokenActivity",
 			result.DestinationTx.DestToken,
 			request.DestinationToken,

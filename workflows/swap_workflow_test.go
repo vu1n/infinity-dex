@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/infinity-dex/activities"
-	"github.com/infinity-dex/services"
+	"github.com/infinity-dex/services/types"
 	"github.com/infinity-dex/universalsdk"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -22,7 +22,7 @@ func TestSwapWorkflow_Success(t *testing.T) {
 
 	// Create mock SDK and register activities
 	mockSDK := universalsdk.NewMockSDK(universalsdk.MockSDKConfig{
-		WrappedTokens: make(map[int64][]services.Token),
+		WrappedTokens: make(map[int64][]types.Token),
 		Latency:       0, // No latency for tests
 		FailureRate:   0, // No failures for happy path test
 	})
@@ -36,7 +36,7 @@ func TestSwapWorkflow_Success(t *testing.T) {
 	env.RegisterActivity(swapActivities.UnwrapTokenActivity)
 
 	// Source token is not wrapped, so should call wrap activity
-	sourceToken := services.Token{
+	sourceToken := types.Token{
 		Symbol:    "ETH",
 		Name:      "Ethereum",
 		Decimals:  18,
@@ -45,7 +45,7 @@ func TestSwapWorkflow_Success(t *testing.T) {
 		IsWrapped: false,
 	}
 
-	wrappedSourceToken := services.Token{
+	wrappedSourceToken := types.Token{
 		Symbol:    "uETH",
 		Name:      "Universal Ethereum",
 		Decimals:  18,
@@ -54,7 +54,7 @@ func TestSwapWorkflow_Success(t *testing.T) {
 		IsWrapped: true,
 	}
 
-	destToken := services.Token{
+	destToken := types.Token{
 		Symbol:    "USDC",
 		Name:      "USD Coin",
 		Decimals:  6,
@@ -63,7 +63,7 @@ func TestSwapWorkflow_Success(t *testing.T) {
 		IsWrapped: false,
 	}
 
-	wrappedDestToken := services.Token{
+	wrappedDestToken := types.Token{
 		Symbol:    "uUSDC",
 		Name:      "Universal USD Coin",
 		Decimals:  6,
@@ -73,7 +73,7 @@ func TestSwapWorkflow_Success(t *testing.T) {
 	}
 
 	// Create test request
-	request := services.SwapRequest{
+	request := types.SwapRequest{
 		SourceToken:        sourceToken,
 		DestinationToken:   destToken,
 		Amount:             big.NewInt(1000000000000000000), // 1 ETH
@@ -85,7 +85,7 @@ func TestSwapWorkflow_Success(t *testing.T) {
 	}
 
 	// Define the transactions that will be returned by the mocked activities
-	sourceTx := services.Transaction{
+	sourceTx := types.Transaction{
 		ID:          "tx-wrap-1",
 		Type:        "wrap",
 		Hash:        "0xwrap1",
@@ -101,7 +101,7 @@ func TestSwapWorkflow_Success(t *testing.T) {
 		Timestamp:   time.Now(),
 	}
 
-	bridgeTx := services.Transaction{
+	bridgeTx := types.Transaction{
 		ID:          "tx-bridge-1",
 		Type:        "transfer",
 		Hash:        "0xbridge1",
@@ -117,7 +117,7 @@ func TestSwapWorkflow_Success(t *testing.T) {
 		Timestamp:   time.Now(),
 	}
 
-	swapTx := services.Transaction{
+	swapTx := types.Transaction{
 		ID:          "tx-swap-1",
 		Type:        "swap",
 		Hash:        "0xswap1",
@@ -133,7 +133,7 @@ func TestSwapWorkflow_Success(t *testing.T) {
 		Timestamp:   time.Now(),
 	}
 
-	unwrapTx := services.Transaction{
+	unwrapTx := types.Transaction{
 		ID:          "tx-unwrap-1",
 		Type:        "unwrap",
 		Hash:        "0xunwrap1",
@@ -150,7 +150,7 @@ func TestSwapWorkflow_Success(t *testing.T) {
 	}
 
 	// Mock activities by name (the way the workflow calls them)
-	env.OnActivity(swapActivities.CalculateFeeActivity, mock.Anything, mock.Anything).Return(&services.Fee{
+	env.OnActivity(swapActivities.CalculateFeeActivity, mock.Anything, mock.Anything).Return(&types.Fee{
 		GasFee:      big.NewInt(1000000000000000),
 		ProtocolFee: big.NewInt(500000000000000),
 		NetworkFee:  big.NewInt(200000000000000),
@@ -170,7 +170,7 @@ func TestSwapWorkflow_Success(t *testing.T) {
 	require.NoError(t, env.GetWorkflowError())
 
 	// Get and verify result
-	var result services.SwapResult
+	var result types.SwapResult
 	require.NoError(t, env.GetWorkflowResult(&result))
 
 	require.True(t, result.Success)
@@ -200,7 +200,7 @@ func TestSwapWorkflow_ErrorHandling(t *testing.T) {
 
 	// Create mock SDK and register activities
 	mockSDK := universalsdk.NewMockSDK(universalsdk.MockSDKConfig{
-		WrappedTokens: make(map[int64][]services.Token),
+		WrappedTokens: make(map[int64][]types.Token),
 		Latency:       0,
 		FailureRate:   0,
 	})
@@ -214,8 +214,8 @@ func TestSwapWorkflow_ErrorHandling(t *testing.T) {
 	env.RegisterActivity(swapActivities.UnwrapTokenActivity)
 
 	// Create test request
-	request := services.SwapRequest{
-		SourceToken: services.Token{
+	request := types.SwapRequest{
+		SourceToken: types.Token{
 			Symbol:    "ETH",
 			Name:      "Ethereum",
 			Decimals:  18,
@@ -223,7 +223,7 @@ func TestSwapWorkflow_ErrorHandling(t *testing.T) {
 			ChainName: "Ethereum",
 			IsWrapped: false,
 		},
-		DestinationToken: services.Token{
+		DestinationToken: types.Token{
 			Symbol:    "USDC",
 			Name:      "USD Coin",
 			Decimals:  6,
