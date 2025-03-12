@@ -55,8 +55,8 @@ const writeCache = (prices: Record<string, CrossChainPriceResponse>) => {
   }
 };
 
-// Mock token prices for common tokens
-const MOCK_PRICES: Record<string, number> = {
+// Fallback prices for when API calls fail
+const FALLBACK_PRICES: Record<string, number> = {
   'eth': 3000,
   'ethereum': 3000,
   'usdc': 1,
@@ -79,16 +79,37 @@ const MOCK_PRICES: Record<string, number> = {
   'raydium': 0.8
 };
 
-// Get token prices - using mock data instead of API call to avoid URL issues
+// Get token prices from CoinGecko or our API
 const getTokenPrices = async (symbols: string[]): Promise<Map<string, number>> => {
   try {
+    // Use absolute URL to call the tokenPrices API
+    // This will work in both development and production environments
+    const host = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_VERCEL_URL || 'localhost:3000';
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+    const baseUrl = `${protocol}://${host}`;
+    
+    const response = await axios.get(`${baseUrl}/api/tokenPrices`, {
+      params: { symbols: symbols.join(',') }
+    });
+    
+    const priceMap = new Map<string, number>();
+    const prices: TokenPrice[] = response.data;
+    
+    prices.forEach(price => {
+      priceMap.set(price.symbol.toLowerCase(), price.current_price);
+    });
+    
+    return priceMap;
+  } catch (error) {
+    console.error('Error fetching token prices:', error);
+    
+    // Fallback to mock prices if API call fails
     const priceMap = new Map<string, number>();
     
-    // Use mock prices for common tokens
     symbols.forEach(symbol => {
       const lowerSymbol = symbol.toLowerCase();
-      if (MOCK_PRICES[lowerSymbol]) {
-        priceMap.set(lowerSymbol, MOCK_PRICES[lowerSymbol]);
+      if (FALLBACK_PRICES[lowerSymbol]) {
+        priceMap.set(lowerSymbol, FALLBACK_PRICES[lowerSymbol]);
       } else {
         // Default price for unknown tokens
         priceMap.set(lowerSymbol, 1);
@@ -96,9 +117,6 @@ const getTokenPrices = async (symbols: string[]): Promise<Map<string, number>> =
     });
     
     return priceMap;
-  } catch (error) {
-    console.error('Error fetching token prices:', error);
-    return new Map();
   }
 };
 
