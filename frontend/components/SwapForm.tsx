@@ -459,12 +459,22 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
       // Only swap if both tokens are selected
       if (!prev.sourceToken || !prev.destinationToken) return prev;
       
+      // Invert the exchange rate when swapping tokens
+      let invertedExchangeRate = '0';
+      if (prev.exchangeRate && prev.exchangeRate !== '0') {
+        const rate = parseFloat(prev.exchangeRate);
+        if (rate > 0) {
+          invertedExchangeRate = (1 / rate).toString();
+        }
+      }
+      
       return {
         ...prev,
         sourceToken: prev.destinationToken,
         destinationToken: prev.sourceToken,
         sourceAmount: prev.destinationAmount,
         destinationAmount: prev.sourceAmount,
+        exchangeRate: invertedExchangeRate, // Use the inverted exchange rate
         // Reset loading state
         isLoading: false
       };

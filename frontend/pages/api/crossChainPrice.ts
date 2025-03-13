@@ -224,7 +224,7 @@ const calculateCrossChainPrice = async (
           toToken: isDestWrapped ? destinationToken : destTokenWrapped,
           fromChain: isSourceWrapped ? normalizedSourceChain : 'universal',
           toChain: isDestWrapped ? normalizedDestChain : 'universal',
-          exchangeRate: '1',
+          exchangeRate: exchangeRate.toString(),
           fee: {
             amount: '0.001',
             token: isSourceWrapped ? sourceToken : sourceTokenWrapped,
