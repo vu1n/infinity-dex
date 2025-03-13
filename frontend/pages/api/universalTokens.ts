@@ -91,10 +91,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       priceMap.set(`${price.symbol.toLowerCase()}-${price.chain_id}`, price.price_usd);
     });
     
+    // Log price map for debugging
+    console.log('Price map entries:', Array.from(priceMap.entries()).slice(0, 5));
+    
     // Convert database tokens to universal tokens
     const universalTokens: UniversalToken[] = dbTokens.map(token => {
       const priceKey = `${token.symbol.toLowerCase()}-${token.chain_id}`;
       const price = priceMap.get(priceKey);
+      
+      // Log price lookup for debugging
+      if (token.symbol === 'ETH' || token.symbol === 'SOL') {
+        console.log(`Price lookup for ${token.symbol}: key=${priceKey}, price=${price}`);
+      }
       
       // Create wrapped version symbol if not already wrapped
       const isWrapped = token.symbol.startsWith('u');
@@ -113,7 +121,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                  `https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/logo.png`,
         wrappedVersion: wrappedVersion,
         unwrappedVersion: unwrappedVersion,
-        price: price,
+        price: price ? parseFloat(price) : undefined,
         jupiterVerified: token.is_verified,
         jupiterVolume: 0 // Default to 0 as we don't have this data
       };
@@ -137,7 +145,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             isWrapped: true,
             logoURI: token.logoURI,
             unwrappedVersion: token.symbol,
-            price: token.price,
+            price: token.price, // Inherit price from unwrapped token
             jupiterVerified: false
           });
         }
