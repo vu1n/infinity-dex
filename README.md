@@ -53,24 +53,101 @@ infinity-dex/
 ### Prerequisites
 
 - Go 1.18 or later
-- Temporal server running locally or accessible remotely
-- Access to Universal.xyz SDK
+- Node.js 16 or later
+- PostgreSQL 13 or later
+- Docker (optional, for containerized deployment)
 
-### Installation
+### Quickstart Guide
 
-1. Clone the repository
-2. Install dependencies: `go mod tidy`
-3. Configure environment variables
-4. Run the Temporal worker: `go run cmd/worker/main.go`
-5. Run the API server: `go run cmd/server/main.go`
+Follow these steps to get Infinity DEX up and running:
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/vu1n/infinity-dex.git
+   cd infinity-dex
+   ```
+
+2. **Initialize the development environment**
+   ```bash
+   make init-dev
+   ```
+   This will install all Go and Node.js dependencies.
+
+3. **Set up the database**
+   ```bash
+   make init-db
+   ```
+   This creates the `infinity_dex` database and initializes the schema.
+
+4. **Build the binaries**
+   ```bash
+   make build
+   ```
+   This builds the server, worker, and price worker binaries.
+
+5. **Start the services**
+   
+   You can start all services at once:
+   ```bash
+   make start-dev
+   ```
+   
+   Or start individual services:
+   ```bash
+   # Start the API server
+   make run-server
+   
+   # Start the price worker
+   make run-price-worker
+   
+   # Start the frontend development server
+   make run-frontend
+   ```
+
+6. **Access the application**
+   - Frontend: http://localhost:3000
+   - API: http://localhost:8080
+
+### Configuration
+
+The application uses environment variables for configuration. Create a `.env` file in the project root:
+
+```
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=your_username
+DB_PASSWORD=your_password
+DB_NAME=infinity_dex
+
+# API Server
+API_PORT=8080
+
+# Price Worker
+PRICE_UPDATE_INTERVAL=60 # seconds
+```
 
 ### Running Tests
 
 Run the service tests:
 
 ```bash
-go test -v ./services/...
+make test
 ```
+
+### Common Issues
+
+- **Database connection errors**: Ensure PostgreSQL is running and the credentials in your `.env` file are correct.
+- **Missing dependencies**: Run `make init-dev` to install all required dependencies.
+- **Port conflicts**: If ports 3000 or 8080 are already in use, modify the configuration to use different ports.
+
+### Development Workflow
+
+1. Make changes to the code
+2. Run tests: `make test`
+3. Format code: `make fmt`
+4. Run linter: `make lint`
+5. Build and run the application: `make start-dev`
 
 ## Development Progress
 
