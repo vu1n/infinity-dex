@@ -20,9 +20,11 @@ interface Props {
   selectedToken: Token | null;
   onSelectToken: (token: Token) => void;
   showChainFilter?: boolean;
+  tokens?: Token[];
+  isLoading?: boolean;
 }
 
-// Sample tokens for demonstration
+// Sample tokens for demonstration (fallback if no tokens are provided)
 const SAMPLE_TOKENS: Token[] = [
   {
     symbol: 'ETH',
@@ -93,11 +95,16 @@ const SAMPLE_TOKENS: Token[] = [
   }
 ];
 
-const TokenSelector: React.FC<Props> = ({ selectedToken, onSelectToken, showChainFilter = false }) => {
+const TokenSelector: React.FC<Props> = ({ 
+  selectedToken, 
+  onSelectToken, 
+  showChainFilter = false,
+  tokens = SAMPLE_TOKENS,
+  isLoading = false
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [tokens, setTokens] = useState<Token[]>(SAMPLE_TOKENS);
-  const [filteredTokens, setFilteredTokens] = useState<Token[]>(SAMPLE_TOKENS);
+  const [filteredTokens, setFilteredTokens] = useState<Token[]>(tokens);
   const [selectedChain, setSelectedChain] = useState<string | null>(null);
   const [uniqueChains, setUniqueChains] = useState<string[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -118,13 +125,13 @@ const TokenSelector: React.FC<Props> = ({ selectedToken, onSelectToken, showChai
 
   // Initialize tokens and unique chains
   useEffect(() => {
-    // In a real app, you would fetch tokens from an API
-    setTokens(SAMPLE_TOKENS);
-    
-    // Extract unique chains
-    const chains = Array.from(new Set(SAMPLE_TOKENS.map(token => token.chainName)));
+    // Extract unique chains from provided tokens
+    const chains = Array.from(new Set(tokens.map(token => token.chainName)));
     setUniqueChains(chains);
-  }, []);
+    
+    // Reset filtered tokens when tokens prop changes
+    setFilteredTokens(tokens);
+  }, [tokens]);
 
   // Filter tokens based on search query and selected chain
   useEffect(() => {
@@ -165,6 +172,7 @@ const TokenSelector: React.FC<Props> = ({ selectedToken, onSelectToken, showChai
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center space-x-2 bg-surface-light hover:bg-surface rounded-xl px-3 py-2 transition-colors"
+        disabled={isLoading}
       >
         {selectedToken ? (
           <>
@@ -178,6 +186,14 @@ const TokenSelector: React.FC<Props> = ({ selectedToken, onSelectToken, showChai
             <span className="font-medium text-white">{selectedToken.symbol}</span>
             <span className="text-xs text-gray-400">({selectedToken.chainName})</span>
           </>
+        ) : isLoading ? (
+          <div className="flex items-center">
+            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span className="text-white">Loading...</span>
+          </div>
         ) : (
           <span className="text-white">Select Token</span>
         )}
@@ -228,7 +244,15 @@ const TokenSelector: React.FC<Props> = ({ selectedToken, onSelectToken, showChai
           </div>
           
           <div className="max-h-60 overflow-y-auto">
-            {filteredTokens.length > 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center p-4">
+                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span className="text-white">Loading tokens...</span>
+              </div>
+            ) : filteredTokens.length > 0 ? (
               filteredTokens.map(token => (
                 <button
                   key={`${token.symbol}-${token.chainId}`}
@@ -240,6 +264,10 @@ const TokenSelector: React.FC<Props> = ({ selectedToken, onSelectToken, showChai
                       src={token.logoURI} 
                       alt={token.symbol} 
                       className="w-8 h-8 rounded-full"
+                      onError={(e) => {
+                        // Fallback for broken images
+                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/32?text=' + token.symbol.charAt(0);
+                      }}
                     />
                   )}
                   <div>
@@ -248,6 +276,12 @@ const TokenSelector: React.FC<Props> = ({ selectedToken, onSelectToken, showChai
                       <span>{token.name}</span>
                       <span className="mx-1">•</span>
                       <span>{token.chainName}</span>
+                      {token.isWrapped && (
+                        <>
+                          <span className="mx-1">•</span>
+                          <span className="text-primary-light">Universal</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   {token.price && (
@@ -258,8 +292,8 @@ const TokenSelector: React.FC<Props> = ({ selectedToken, onSelectToken, showChai
                 </button>
               ))
             ) : (
-              <div className="px-4 py-3 text-gray-400 text-center">
-                No tokens found
+              <div className="p-4 text-center text-gray-400">
+                No tokens found matching "{searchQuery}"
               </div>
             )}
           </div>

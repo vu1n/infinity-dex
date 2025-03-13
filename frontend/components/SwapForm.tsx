@@ -15,11 +15,13 @@ interface Token {
   logoURI?: string;
   price?: number;
   isWrapped?: boolean;
+  wrappedVersion?: string;
+  unwrappedVersion?: string;
 }
 
 // Define the step in a swap route
 interface RouteStep {
-  type: 'swap' | 'bridge';
+  type: 'swap' | 'bridge' | 'wrap' | 'unwrap';
   fromToken: string;
   toToken: string;
   fromChain: string;
@@ -30,6 +32,23 @@ interface RouteStep {
 // Define the route for a swap
 interface Route {
   steps: RouteStep[];
+}
+
+// API response types
+interface TokensResponse {
+  tokens: Token[];
+}
+
+interface PriceQuoteResponse {
+  success: boolean;
+  error?: string;
+  estimatedOutput: string;
+  exchangeRate: string;
+  route: Route;
+  fee?: {
+    amount: string;
+    token: string;
+  };
 }
 
 // Define the props for the SwapForm component
@@ -50,6 +69,8 @@ interface SwapState {
   route: Route | null;
   transactionHash: string | null;
   transactionStatus: 'pending' | 'completed' | 'failed' | null;
+  availableTokens: Token[];
+  isLoadingTokens: boolean;
 }
 
 // Initial state for the swap form
@@ -64,7 +85,9 @@ const initialSwapState: SwapState = {
   exchangeRate: '0',
   route: null,
   transactionHash: null,
-  transactionStatus: null
+  transactionStatus: null,
+  availableTokens: [],
+  isLoadingTokens: true
 };
 
 // Define the SwapForm component
@@ -84,6 +107,36 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
 
   // State for tracking if the form is ready to swap
   const [isReadyToSwap, setIsReadyToSwap] = useState(false);
+
+  // Fetch available tokens on component mount
+  useEffect(() => {
+    const fetchTokens = async () => {
+      try {
+        setSwapState(prev => ({ ...prev, isLoadingTokens: true }));
+        const response = await fetch('/api/universalTokens');
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch tokens');
+        }
+        
+        const data = await response.json();
+        setSwapState(prev => ({ 
+          ...prev, 
+          availableTokens: data,
+          isLoadingTokens: false 
+        }));
+      } catch (error) {
+        console.error('Error fetching tokens:', error);
+        setSwapState(prev => ({ 
+          ...prev, 
+          error: error instanceof Error ? error.message : 'Failed to fetch tokens',
+          isLoadingTokens: false 
+        }));
+      }
+    };
+    
+    fetchTokens();
+  }, []);
 
   // Check if the form is ready to swap
   useEffect(() => {
@@ -178,88 +231,47 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
       const sourceSymbol = sourceToken.symbol;
       const destSymbol = destinationToken.symbol;
       
-      let outputAmount = '0';
-      let exchangeRate = '0';
-      let route: Route | null = null;
+      console.log('Fetching price quote for:', {
+        sourceToken: sourceSymbol,
+        sourceChain: sourceToken.chainName.toLowerCase(),
+        destinationToken: destSymbol,
+        destinationChain: destinationToken.chainName.toLowerCase(),
+        amount
+      });
+      
+      // Call the cross-chain price API for all swaps
+      const response = await fetch('/api/crossChainPrice', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sourceToken: sourceSymbol,
+          sourceChain: sourceToken.chainName.toLowerCase(),
+          destinationToken: destSymbol,
+          destinationChain: destinationToken.chainName.toLowerCase(),
+          amount
+        }),
+      });
 
-      // Check if cross-chain swap
-      if (sourceToken.chainName !== destinationToken.chainName) {
-        console.log('Fetching cross-chain price...');
-        
-        // Call the cross-chain price API
-        const response = await fetch('/api/crossChainPrice', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            sourceToken: sourceSymbol,
-            sourceChain: sourceToken.chainName.toLowerCase(),
-            destinationToken: destSymbol,
-            destinationChain: destinationToken.chainName.toLowerCase(),
-            amount
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch cross-chain price');
-        }
-
-        const data = await response.json();
-        console.log('Cross-chain price data:', data);
-        
-        if (!data.success) {
-          throw new Error(data.error || 'Failed to calculate price');
-        }
-        
-        outputAmount = data.estimatedOutput;
-        exchangeRate = data.exchangeRate;
-        route = data.route;
-      } else {
-        console.log('Calculating same-chain swap...');
-        
-        // Mock exchange rates for same-chain swaps (in a real app, this would come from an API)
-        const mockExchangeRates: Record<string, Record<string, number>> = {
-          'ETH': { 'USDC': 1800, 'SOL': 15 },
-          'USDC': { 'ETH': 1/1800, 'SOL': 1/120 },
-          'SOL': { 'ETH': 1/15, 'USDC': 120 }
-        };
-        
-        // Calculate output amount
-        const inputAmount = parseFloat(amount);
-        const rate = mockExchangeRates[sourceSymbol]?.[destSymbol] || 1;
-        
-        // Calculate output amount - this is correct as the rate represents 
-        // how many destination tokens you get for 1 source token
-        const calculatedOutput = inputAmount * rate;
-        
-        // Apply a small fee (0.3%)
-        const fee = calculatedOutput * 0.003;
-        const netOutput = calculatedOutput - fee;
-        
-        outputAmount = netOutput.toFixed(6);
-        exchangeRate = rate.toString();
-        
-        // Create a simple route for same-chain swaps
-        route = {
-          steps: [
-            {
-              type: 'swap',
-              fromToken: sourceSymbol,
-              toToken: destSymbol,
-              fromChain: sourceToken.chainName,
-              toChain: destinationToken.chainName
-            }
-          ]
-        };
+      if (!response.ok) {
+        throw new Error(`Failed to fetch price: ${response.statusText}`);
       }
 
+      const data: PriceQuoteResponse = await response.json();
+      console.log('Price quote data:', data);
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to calculate price');
+      }
+      
       setSwapState(prev => ({
         ...prev,
-        destinationAmount: outputAmount,
-        exchangeRate,
-        route,
-        isLoading: false
+        destinationAmount: data.estimatedOutput,
+        exchangeRate: data.exchangeRate,
+        route: data.route,
+        isLoading: false,
+        error: null
       }));
     } catch (error) {
       console.error('Error fetching price quote:', error);
@@ -447,6 +459,8 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
             selectedToken={swapState.sourceToken}
             onSelectToken={handleSourceTokenSelect}
             showChainFilter={true}
+            tokens={swapState.availableTokens}
+            isLoading={swapState.isLoadingTokens}
           />
         </div>
       </div>
@@ -479,6 +493,8 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
             selectedToken={swapState.destinationToken}
             onSelectToken={handleDestinationTokenSelect}
             showChainFilter={true}
+            tokens={swapState.availableTokens}
+            isLoading={swapState.isLoadingTokens}
           />
         </div>
       </div>
@@ -501,11 +517,17 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
                   <React.Fragment key={index}>
                     <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded">
                       {step.fromToken}
+                      {step.type === 'bridge' && ` (${step.fromChain})`}
                     </span>
-                    <span className="mx-1 text-gray-500 text-xs">→</span>
+                    <span className="mx-1 text-gray-500 text-xs">
+                      {step.type === 'swap' ? '→' : 
+                       step.type === 'bridge' ? '⟿' : 
+                       step.type === 'wrap' ? '⊂' : '⊃'}
+                    </span>
                     {index === swapState.route!.steps.length - 1 && (
                       <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded">
                         {step.toToken}
+                        {step.type === 'bridge' && ` (${step.toChain})`}
                       </span>
                     )}
                   </React.Fragment>
@@ -513,6 +535,19 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
               </div>
             </div>
           )}
+        </div>
+      )}
+      
+      {/* Loading tokens message */}
+      {swapState.isLoadingTokens && (
+        <div className="mb-6 p-3 bg-background rounded-xl">
+          <div className="flex items-center justify-center">
+            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span className="text-sm text-gray-400">Loading tokens...</span>
+          </div>
         </div>
       )}
       
