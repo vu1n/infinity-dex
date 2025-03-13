@@ -127,51 +127,63 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
     
     // Only allow numbers and decimals
     if (value === '' || /^\d*\.?\d*$/.test(value)) {
-      setSwapState(prev => ({
-        ...prev,
-        sourceAmount: value,
-        isLoading: value !== '' && parseFloat(value) > 0
-      }));
-      
-      // Fetch price quote if we have both tokens and a valid amount
-      if (
-        swapState.sourceToken && 
-        swapState.destinationToken && 
-        value !== '' && 
-        parseFloat(value) > 0
-      ) {
-        fetchPrice();
-      } else {
-        // Reset destination amount if source amount is invalid
-        setSwapState(prev => ({
+      // Update state first
+      setSwapState(prev => {
+        const newState = {
           ...prev,
           sourceAmount: value,
-          destinationAmount: '',
-          isLoading: false
-        }));
-      }
+          isLoading: value !== '' && parseFloat(value) > 0
+        };
+        
+        // Then check if we should fetch price
+        if (
+          newState.sourceToken && 
+          newState.destinationToken && 
+          value !== '' && 
+          parseFloat(value) > 0
+        ) {
+          // Use setTimeout to ensure state is updated before fetchPrice is called
+          setTimeout(() => {
+            console.log('Fetching price after amount change:', {
+              sourceToken: newState.sourceToken?.symbol,
+              destinationToken: newState.destinationToken?.symbol,
+              amount: value
+            });
+            
+            // Call fetchPrice directly with current values
+            fetchPriceDirectly(
+              newState.sourceToken,
+              newState.destinationToken,
+              value
+            );
+          }, 0);
+        } else if (value === '' || parseFloat(value) <= 0) {
+          // Reset destination amount if source amount is invalid
+          newState.destinationAmount = '';
+          newState.isLoading = false;
+        }
+        
+        return newState;
+      });
     }
   };
 
-  // Fetch price quote for the selected tokens
-  const fetchPrice = useCallback(async () => {
-    if (!swapState.sourceToken || !swapState.destinationToken || !swapState.sourceAmount) {
+  // Direct price fetch function that doesn't rely on state
+  const fetchPriceDirectly = async (sourceToken: Token | null, destinationToken: Token | null, amount: string) => {
+    if (!sourceToken || !destinationToken || !amount) {
       return;
     }
 
-    setSwapState(prev => ({ ...prev, isLoading: true, error: null }));
-
     try {
-      const sourceSymbol = swapState.sourceToken.symbol;
-      const destSymbol = swapState.destinationToken.symbol;
-      const amount = swapState.sourceAmount;
+      const sourceSymbol = sourceToken.symbol;
+      const destSymbol = destinationToken.symbol;
       
       let outputAmount = '0';
       let exchangeRate = '0';
       let route: Route | null = null;
 
       // Check if cross-chain swap
-      if (swapState.sourceToken.chainName !== swapState.destinationToken.chainName) {
+      if (sourceToken.chainName !== destinationToken.chainName) {
         console.log('Fetching cross-chain price...');
         
         // Call the cross-chain price API
@@ -182,9 +194,9 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
           },
           body: JSON.stringify({
             sourceToken: sourceSymbol,
-            sourceChain: swapState.sourceToken.chainName.toLowerCase(),
+            sourceChain: sourceToken.chainName.toLowerCase(),
             destinationToken: destSymbol,
-            destinationChain: swapState.destinationToken.chainName.toLowerCase(),
+            destinationChain: destinationToken.chainName.toLowerCase(),
             amount
           }),
         });
@@ -235,8 +247,8 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
               type: 'swap',
               fromToken: sourceSymbol,
               toToken: destSymbol,
-              fromChain: swapState.sourceToken.chainName,
-              toChain: swapState.destinationToken.chainName
+              fromChain: sourceToken.chainName,
+              toChain: destinationToken.chainName
             }
           ]
         };
@@ -257,6 +269,22 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
         isLoading: false
       }));
     }
+  };
+
+  // Keep the original fetchPrice for other use cases
+  const fetchPrice = useCallback(async () => {
+    if (!swapState.sourceToken || !swapState.destinationToken || !swapState.sourceAmount) {
+      return;
+    }
+
+    setSwapState(prev => ({ ...prev, isLoading: true, error: null }));
+    
+    // Call the direct function with current state values
+    fetchPriceDirectly(
+      swapState.sourceToken,
+      swapState.destinationToken,
+      swapState.sourceAmount
+    );
   }, [swapState.sourceToken, swapState.destinationToken, swapState.sourceAmount]);
 
   // Handle swap button click
