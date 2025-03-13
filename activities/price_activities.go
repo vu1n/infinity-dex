@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -242,12 +243,14 @@ func (a *PriceActivities) FetchCoinGeckoPricesActivity(ctx context.Context, requ
 }
 
 // FetchJupiterPricesActivity fetches token prices from Jupiter API
-func (a *PriceActivities) FetchJupiterPricesActivity(ctx context.Context, request types.PriceFetchRequest) ([]types.TokenPrice, error) {
+func (a *PriceActivities) FetchJupiterPricesActivity(ctx context.Context, request types.PriceFetchRequest) (
+	[]types.TokenPrice, error) {
 	logger := activity.GetLogger(ctx)
 	logger.Info("Fetching Jupiter token prices")
 
-	// First, get the list of verified tokens from Jupiter
+	// Step 1: Get the list of verified tokens from Jupiter
 	tokensURL := "https://api.jup.ag/tokens/v1/tagged/verified"
+	logger.Info("Fetching verified tokens from Jupiter API", "url", tokensURL)
 
 	// Make request to Jupiter tokens API
 	tokensResp, err := a.httpClient.Get(tokensURL)
@@ -274,25 +277,25 @@ func (a *PriceActivities) FetchJupiterPricesActivity(ctx context.Context, reques
 		return nil, err
 	}
 	if err := json.Unmarshal(tokensBody, &jupiterTokens); err != nil {
+		logger.Error("Failed to parse Jupiter tokens response", "error", err)
+		if len(tokensBody) > 200 {
+			logger.Info("Jupiter tokens response sample", "body", string(tokensBody[:200])+"...")
+		} else {
+			logger.Info("Jupiter tokens response", "body", string(tokensBody))
+		}
 		return nil, err
 	}
 
-	// Create a map of token addresses to symbols and names
-	tokenInfo := make(map[string]struct {
-		Symbol string
-		Name   string
-		Volume float64
-	})
+	logger.Info("Received Jupiter verified tokens", "count", len(jupiterTokens))
 
-	// Known memecoin symbols (case insensitive)
-	knownMemecoins := map[string]bool{
-		"bonk": true, "wif": true, "dogwif": true, "bome": true, "book of meme": true,
-		"popcat": true, "cat": true, "mog": true, "slerf": true, "sloth": true,
-		"nope": true, "wen": true, "samo": true, "doge": true, "shib": true,
-		"pepe": true, "cope": true, "ape": true, "monkey": true, "frog": true,
-		"moon": true, "rocket": true, "wojak": true, "jup": true, "jupiter": true,
-		"pyth": true, "ray": true, "raydium": true,
+	// Create a slice to store token information for sorting
+	type TokenInfo struct {
+		Address string
+		Symbol  string
+		Name    string
+		Volume  float64
 	}
+	var tokenInfoList []TokenInfo
 
 	// Extract token information
 	for _, token := range jupiterTokens {
@@ -300,51 +303,66 @@ func (a *PriceActivities) FetchJupiterPricesActivity(ctx context.Context, reques
 		name := token["name"].(string)
 		address := token["address"].(string)
 
-		// Check if it's a memecoin (for logging purposes)
-		symbolLower := strings.ToLower(symbol)
-		nameLower := strings.ToLower(name)
-		isMemecoin := knownMemecoins[symbolLower] || knownMemecoins[nameLower]
-
 		// Extract daily volume if available
 		var volume float64
 		if dailyVolume, ok := token["daily_volume"].(float64); ok {
 			volume = dailyVolume
 		}
 
-		// Store token info for all tokens
-		tokenInfo[address] = struct {
-			Symbol string
-			Name   string
-			Volume float64
-		}{
-			Symbol: symbol,
-			Name:   name,
-			Volume: volume,
-		}
-
-		// Log memecoin detection for debugging
-		if isMemecoin {
-			logger.Debug("Detected memecoin", "symbol", symbol, "name", name)
-		}
+		// Add to the list
+		tokenInfoList = append(tokenInfoList, TokenInfo{
+			Address: address,
+			Symbol:  symbol,
+			Name:    name,
+			Volume:  volume,
+		})
 	}
 
-	logger.Info("Extracted token information", "count", len(tokenInfo))
+	logger.Info("Extracted token information", "count", len(tokenInfoList))
 
-	// Log a few token entries for debugging
-	count := 0
-	for address, info := range tokenInfo {
-		if count < 5 {
-			logger.Info("Token info", "address", address, "symbol", info.Symbol, "name", info.Name, "volume", info.Volume)
-			count++
+	// TODO: Cache or store these tokens in the database for future use
+	// This would reduce external IO in later calls
+
+	// Step 2: Sort tokens by daily volume (descending) and get top 50
+	sort.Slice(tokenInfoList, func(i, j int) bool {
+		return tokenInfoList[i].Volume > tokenInfoList[j].Volume
+	})
+
+	// Get top 50 tokens or all if less than 50
+	topTokenCount := 50
+	if len(tokenInfoList) < topTokenCount {
+		topTokenCount = len(tokenInfoList)
+	}
+	topTokens := tokenInfoList[:topTokenCount]
+
+	// Create a map for quick lookup of token info
+	tokenInfoMap := make(map[string]TokenInfo)
+	var tokenIds []string
+	for _, token := range topTokens {
+		tokenIds = append(tokenIds, token.Address)
+		tokenInfoMap[token.Address] = token
+	}
+
+	logger.Info("Selected top tokens by volume", "count", len(tokenIds))
+
+	// Log a few top tokens for debugging
+	for i, token := range topTokens {
+		if i < 5 {
+			logger.Info("Top token",
+				"rank", i+1,
+				"symbol", token.Symbol,
+				"name", token.Name,
+				"address", token.Address,
+				"volume", token.Volume)
 		} else {
 			break
 		}
 	}
 
-	// Now, fetch prices using the Jupiter Price API
-	priceURL := "https://price.jup.ag/v4/price?ids=all"
-
-	logger.Info("Fetching Jupiter prices from API", "url", priceURL)
+	// Step 3: Fetch prices for the top tokens using the Jupiter price API
+	// The API supports up to 100 IDs, but we're using 50 as specified
+	priceURL := fmt.Sprintf("https://api.jup.ag/price/v2?ids=%s", strings.Join(tokenIds, ","))
+	logger.Info("Fetching Jupiter prices from API", "url", priceURL, "token_count", len(tokenIds))
 
 	// Make request to Jupiter Price API
 	priceResp, err := a.httpClient.Get(priceURL)
@@ -365,14 +383,7 @@ func (a *PriceActivities) FetchJupiterPricesActivity(ctx context.Context, reques
 	}
 
 	// Parse price response
-	var jupiterPriceResp struct {
-		Data map[string]struct {
-			ID     string  `json:"id"`
-			Mint   string  `json:"mint"`
-			Price  float64 `json:"price"`
-			Change float64 `json:"change24h,omitempty"`
-		} `json:"data"`
-	}
+	var jupiterPriceResp map[string]float64
 	priceBody, err := ioutil.ReadAll(priceResp.Body)
 	if err != nil {
 		return nil, err
@@ -388,15 +399,15 @@ func (a *PriceActivities) FetchJupiterPricesActivity(ctx context.Context, reques
 		return nil, err
 	}
 
-	logger.Info("Received Jupiter price data", "count", len(jupiterPriceResp.Data))
+	logger.Info("Received Jupiter price data", "count", len(jupiterPriceResp))
 
 	// Convert to our token price format
 	var prices []types.TokenPrice
 	var matchedCount, skippedCount int
 
-	for mint, priceData := range jupiterPriceResp.Data {
+	for mint, price := range jupiterPriceResp {
 		// Skip if we don't have token info for this mint
-		info, exists := tokenInfo[mint]
+		info, exists := tokenInfoMap[mint]
 		if !exists {
 			skippedCount++
 			continue
@@ -411,8 +422,8 @@ func (a *PriceActivities) FetchJupiterPricesActivity(ctx context.Context, reques
 			Address:       mint,
 			ChainID:       1399811149, // Solana chain ID
 			ChainName:     "solana",
-			PriceUSD:      priceData.Price,
-			Change24h:     priceData.Change,
+			PriceUSD:      price,
+			Change24h:     0, // Change data not available in this API response
 			LastUpdated:   time.Now(),
 			Source:        types.PriceSourceJupiter,
 			IsVerified:    true,
@@ -421,7 +432,7 @@ func (a *PriceActivities) FetchJupiterPricesActivity(ctx context.Context, reques
 	}
 
 	logger.Info("Processed Jupiter token prices",
-		"total_prices", len(jupiterPriceResp.Data),
+		"total_prices", len(jupiterPriceResp),
 		"matched", matchedCount,
 		"skipped", skippedCount,
 		"final_count", len(prices))
@@ -432,7 +443,6 @@ func (a *PriceActivities) FetchJupiterPricesActivity(ctx context.Context, reques
 			logger.Info("Price entry",
 				"symbol", price.Symbol,
 				"price_usd", price.PriceUSD,
-				"change_24h", price.Change24h,
 				"volume", price.JupiterVolume)
 		} else {
 			break
