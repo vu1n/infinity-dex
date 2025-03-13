@@ -131,11 +131,31 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
         }
         
         const data = await response.json();
+        
+        // Find ETH and SOL tokens for default selection
+        const ethToken = data.find((token: Token) => 
+          token.symbol.toUpperCase() === 'ETH' && token.chainName.toLowerCase() === 'ethereum'
+        );
+        
+        const solToken = data.find((token: Token) => 
+          token.symbol.toUpperCase() === 'SOL' && token.chainName.toLowerCase() === 'solana'
+        );
+        
         setSwapState(prev => ({ 
           ...prev, 
           availableTokens: data,
+          sourceToken: ethToken || null,
+          destinationToken: solToken || null,
+          sourceAmount: '1',
           isLoadingTokens: false 
         }));
+        
+        // If we have both default tokens, fetch initial price quote
+        if (ethToken && solToken) {
+          setTimeout(() => {
+            fetchPriceDirectly(ethToken, solToken, '1');
+          }, 500);
+        }
       } catch (error) {
         console.error('Error fetching tokens:', error);
         setSwapState(prev => ({ 

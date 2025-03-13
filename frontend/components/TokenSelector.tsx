@@ -332,7 +332,7 @@ const TokenSelector: React.FC<Props> = ({
                       )}
                     </div>
                   </div>
-                  {token.price && (
+                  {token.price !== undefined && token.price !== null && (
                     <div className="text-right">
                       <div className="text-white">${token.price < 0.01 ? token.price.toExponential(2) : token.price.toFixed(2)}</div>
                     </div>
