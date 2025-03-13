@@ -331,7 +331,7 @@ export const ConnectWalletButton: React.FC<WalletButtonProps> = ({ onConnect, cl
     <div className="relative">
       {!currentChain ? (
         <button
-          className={`bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${className}`}
+          className={`btn-primary ${className}`}
           onClick={() => setShowOptions(!showOptions)}
           disabled={isConnecting}
         >
@@ -339,7 +339,7 @@ export const ConnectWalletButton: React.FC<WalletButtonProps> = ({ onConnect, cl
         </button>
       ) : (
         <button
-          className={`bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded flex items-center ${className}`}
+          className={`bg-surface hover:bg-surface-light text-white font-bold py-2 px-4 rounded-xl flex items-center ${className}`}
           onClick={() => setShowOptions(!showOptions)}
         >
           {currentChain === 'ethereum' ? (
@@ -352,18 +352,18 @@ export const ConnectWalletButton: React.FC<WalletButtonProps> = ({ onConnect, cl
       )}
 
       {showOptions && (
-        <div className="absolute mt-2 w-48 bg-white rounded-md shadow-lg z-10">
+        <div className="absolute mt-2 w-48 bg-surface rounded-xl shadow-lg z-10">
           {!currentChain ? (
             <>
               <button
-                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                className="flex items-center w-full px-4 py-2 text-sm text-white hover:bg-surface-light"
                 onClick={() => handleConnect('ethereum')}
               >
                 <Image src="/metamask-logo.svg" alt="MetaMask" width={20} height={20} className="mr-2" />
                 MetaMask (Ethereum)
               </button>
               <button
-                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                className="flex items-center w-full px-4 py-2 text-sm text-white hover:bg-surface-light"
                 onClick={() => handleConnect('solana')}
               >
                 <Image src="/phantom-logo.svg" alt="Phantom" width={20} height={20} className="mr-2" />
@@ -372,7 +372,7 @@ export const ConnectWalletButton: React.FC<WalletButtonProps> = ({ onConnect, cl
             </>
           ) : (
             <button
-              className="w-full px-4 py-2 text-sm text-red-700 hover:bg-gray-100"
+              className="w-full px-4 py-2 text-sm text-red-500 hover:bg-surface-light"
               onClick={handleDisconnect}
             >
               Disconnect

@@ -164,7 +164,7 @@ const TokenSelector: React.FC<Props> = ({ selectedToken, onSelectToken, showChai
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-2 bg-gray-200 hover:bg-gray-300 rounded-lg px-3 py-2 transition-colors"
+        className="flex items-center space-x-2 bg-surface-light hover:bg-surface rounded-xl px-3 py-2 transition-colors"
       >
         {selectedToken ? (
           <>
@@ -175,26 +175,26 @@ const TokenSelector: React.FC<Props> = ({ selectedToken, onSelectToken, showChai
                 className="w-6 h-6 rounded-full"
               />
             )}
-            <span className="font-medium">{selectedToken.symbol}</span>
-            <span className="text-xs text-gray-500">({selectedToken.chainName})</span>
+            <span className="font-medium text-white">{selectedToken.symbol}</span>
+            <span className="text-xs text-gray-400">({selectedToken.chainName})</span>
           </>
         ) : (
-          <span>Select Token</span>
+          <span className="text-white">Select Token</span>
         )}
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-lg z-10 overflow-hidden">
-          <div className="p-3 border-b">
+        <div className="absolute right-0 mt-2 w-72 bg-surface rounded-xl shadow-lg z-10 overflow-hidden">
+          <div className="p-3 border-b border-surface-light">
             <input
               type="text"
               placeholder="Search token name or symbol"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 bg-background border border-surface-light rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-white"
               autoFocus
             />
             
@@ -204,8 +204,8 @@ const TokenSelector: React.FC<Props> = ({ selectedToken, onSelectToken, showChai
                   onClick={() => handleSelectChain(null)}
                   className={`text-xs px-2 py-1 rounded-full ${
                     selectedChain === null 
-                      ? 'bg-blue-500 text-white' 
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      ? 'bg-primary text-white' 
+                      : 'bg-surface-light text-gray-300 hover:bg-surface-light'
                   }`}
                 >
                   All Chains
@@ -216,8 +216,8 @@ const TokenSelector: React.FC<Props> = ({ selectedToken, onSelectToken, showChai
                     onClick={() => handleSelectChain(chain)}
                     className={`text-xs px-2 py-1 rounded-full ${
                       selectedChain === chain 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        ? 'bg-primary text-white' 
+                        : 'bg-surface-light text-gray-300 hover:bg-surface-light'
                     }`}
                   >
                     {chain}
@@ -233,7 +233,7 @@ const TokenSelector: React.FC<Props> = ({ selectedToken, onSelectToken, showChai
                 <button
                   key={`${token.symbol}-${token.chainId}`}
                   onClick={() => handleSelectToken(token)}
-                  className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-100 transition-colors text-left"
+                  className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-surface-light transition-colors text-left"
                 >
                   {token.logoURI && (
                     <img 
@@ -243,8 +243,8 @@ const TokenSelector: React.FC<Props> = ({ selectedToken, onSelectToken, showChai
                     />
                   )}
                   <div>
-                    <div className="font-medium">{token.symbol}</div>
-                    <div className="text-xs text-gray-500 flex items-center">
+                    <div className="font-medium text-white">{token.symbol}</div>
+                    <div className="text-xs text-gray-400 flex items-center">
                       <span>{token.name}</span>
                       <span className="mx-1">•</span>
                       <span>{token.chainName}</span>
@@ -252,13 +252,13 @@ const TokenSelector: React.FC<Props> = ({ selectedToken, onSelectToken, showChai
                   </div>
                   {token.price && (
                     <div className="ml-auto text-right">
-                      <div className="text-sm">${token.price.toLocaleString()}</div>
+                      <div className="text-sm text-gray-300">${token.price.toLocaleString()}</div>
                     </div>
                   )}
                 </button>
               ))
             ) : (
-              <div className="px-4 py-3 text-gray-500 text-center">
+              <div className="px-4 py-3 text-gray-400 text-center">
                 No tokens found
               </div>
             )}

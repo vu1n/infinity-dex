@@ -53,7 +53,7 @@ const initialSwapState: SwapState = {
 };
 
 // Define the SwapForm component
-export const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
+const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
   // State for the swap form
   const [swapState, setSwapState] = useState<SwapState>(initialSwapState);
   
@@ -372,7 +372,7 @@ export const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
 
   // Render the swap form
   return (
-    <div className={`bg-white rounded-lg shadow-lg p-6 ${className}`}>
+    <div className={`bg-surface rounded-xl shadow-lg p-6 ${className}`}>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">Swap</h2>
         <ConnectWalletButton />
@@ -381,20 +381,20 @@ export const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
       {/* Source token section */}
       <div className="mb-4">
         <div className="flex justify-between items-center mb-2">
-          <label className="text-sm font-medium text-gray-600">From</label>
+          <label className="text-sm font-medium text-white">From</label>
           {currentChain && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-gray-400">
               Connected to {currentChain.charAt(0).toUpperCase() + currentChain.slice(1)}
             </span>
           )}
         </div>
-        <div className="flex items-center bg-gray-100 rounded-lg p-3">
+        <div className="flex items-center bg-background rounded-xl p-3">
           <input
             type="text"
             value={swapState.sourceAmount}
             onChange={handleSourceAmountChange}
             placeholder="0.0"
-            className="w-full bg-transparent text-lg font-medium focus:outline-none"
+            className="w-full bg-transparent text-lg font-medium focus:outline-none text-white"
           />
           <TokenSelector
             selectedToken={swapState.sourceToken}
@@ -408,10 +408,10 @@ export const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
       <div className="flex justify-center my-4">
         <button
           onClick={handleSwapTokens}
-          className="bg-gray-200 p-2 rounded-full hover:bg-gray-300 transition-colors"
+          className="bg-surface-light p-2 rounded-full hover:bg-surface-light transition-colors"
           disabled={!swapState.sourceToken || !swapState.destinationToken}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
           </svg>
         </button>
@@ -419,14 +419,14 @@ export const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
       
       {/* Destination token section */}
       <div className="mb-6">
-        <label className="text-sm font-medium text-gray-600 mb-2 block">To</label>
-        <div className="flex items-center bg-gray-100 rounded-lg p-3">
+        <label className="text-sm font-medium text-white mb-2 block">To</label>
+        <div className="flex items-center bg-background rounded-xl p-3">
           <input
             type="text"
             value={swapState.destinationAmount}
             readOnly
             placeholder="0.0"
-            className="w-full bg-transparent text-lg font-medium focus:outline-none"
+            className="w-full bg-transparent text-lg font-medium focus:outline-none text-white"
           />
           <TokenSelector
             selectedToken={swapState.destinationToken}
@@ -438,21 +438,21 @@ export const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
       
       {/* Exchange rate and route information */}
       {swapState.exchangeRate !== '0' && swapState.sourceToken && swapState.destinationToken && (
-        <div className="mb-6 p-3 bg-gray-50 rounded-lg">
+        <div className="mb-6 p-3 bg-background rounded-xl">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-gray-600">Exchange Rate</span>
-            <span className="text-sm font-medium">
+            <span className="text-sm text-gray-400">Exchange Rate</span>
+            <span className="text-sm font-medium text-white">
               1 {swapState.sourceToken.symbol} ≈ {parseFloat(swapState.exchangeRate).toFixed(6)} {swapState.destinationToken.symbol}
             </span>
           </div>
           
           {swapState.route && swapState.route.steps && (
             <div className="mt-2">
-              <span className="text-sm text-gray-600 block mb-1">Route</span>
+              <span className="text-sm text-gray-400 block mb-1">Route</span>
               <div className="flex items-center flex-wrap">
                 {swapState.route.steps.map((step: any, index: number) => (
                   <React.Fragment key={index}>
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                    <span className="text-xs bg-primary-light text-white px-2 py-1 rounded">
                       {step.fromToken}
                       {step.fromChain && ` (${step.fromChain})`}
                     </span>
@@ -462,7 +462,7 @@ export const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
                     </svg>
                     
                     {index === swapState.route.steps.length - 1 && (
-                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                      <span className="text-xs bg-secondary-light text-white px-2 py-1 rounded">
                         {step.toToken}
                         {step.toChain && ` (${step.toChain})`}
                       </span>
@@ -477,28 +477,30 @@ export const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
       
       {/* Error message */}
       {swapState.error && (
-        <div className="mb-6 p-3 bg-red-50 text-red-700 rounded-lg">
+        <div className="mb-6 p-3 bg-red-900/20 text-red-400 rounded-xl">
           {swapState.error}
         </div>
       )}
       
       {/* Transaction status */}
       {swapState.transactionHash && (
-        <div className="mb-6 p-3 bg-blue-50 rounded-lg">
+        <div className="mb-6 p-3 bg-primary/20 rounded-xl">
           <div className="flex justify-between items-center">
-            <span className="text-sm text-blue-700">Transaction</span>
+            <span className="text-sm text-primary-light">Transaction</span>
             <span className={`text-sm font-medium ${
-              swapState.transactionStatus === 'completed' ? 'text-green-600' : 
-              swapState.transactionStatus === 'failed' ? 'text-red-600' : 'text-yellow-600'
+              swapState.transactionStatus === 'completed' ? 'text-secondary-light' : 
+              swapState.transactionStatus === 'failed' ? 'text-red-400' : 'text-accent'
             }`}>
-              {swapState.transactionStatus?.charAt(0).toUpperCase() + swapState.transactionStatus?.slice(1) || 'Pending'}
+              {swapState.transactionStatus ? 
+                swapState.transactionStatus.charAt(0).toUpperCase() + swapState.transactionStatus.slice(1) 
+                : 'Pending'}
             </span>
           </div>
           <a 
             href={getExplorerUrl(swapState.transactionHash)}
             target="_blank" 
             rel="noopener noreferrer"
-            className="text-xs text-blue-600 hover:underline break-all"
+            className="text-xs text-primary-light hover:underline break-all"
           >
             {swapState.transactionHash}
           </a>
@@ -509,10 +511,10 @@ export const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
       <button
         onClick={handleSwap}
         disabled={!isReadyToSwap || swapState.isLoading}
-        className={`w-full py-3 px-4 rounded-lg font-medium ${
+        className={`w-full py-3 px-4 rounded-xl font-medium ${
           isReadyToSwap && !swapState.isLoading
-            ? 'bg-blue-600 text-white hover:bg-blue-700'
-            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            ? 'btn-primary'
+            : 'bg-surface-light text-gray-400 cursor-not-allowed'
         } transition-colors`}
       >
         {swapState.isLoading ? (
@@ -535,4 +537,6 @@ export const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
       </button>
     </div>
   );
-}; 
+};
+
+export default SwapForm; 
