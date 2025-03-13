@@ -49,46 +49,12 @@ const getTokenPrices = async (symbols: string[]): Promise<Map<string, number>> =
     // Fetch prices from database
     const dbPrices = await getLatestTokenPrices();
     
-    // Reference prices for common tokens (from reliable sources like CoinGecko)
-    const referencePrices: Record<string, number> = {
-      'eth': 1800,
-      'sol': 120,
-      'usdc': 1,
-      'usdt': 1,
-      'matic': 0.7,
-      'avax': 28,
-      'jup': 0.65,
-      'bonk': 0.00001,
-      'wif': 1.85,
-      'bome': 0.02,
-      'pyth': 0.45,
-      'ray': 0.35,
-      'btc': 83000,
-      'pepe': 0.0000012
-    };
-    
-    // Map prices to symbols, normalizing Jupiter prices if needed
+    // Map prices to symbols
     for (const price of dbPrices) {
       const symbol = price.symbol.toLowerCase();
       
       if (normalizedSymbols.includes(symbol)) {
-        let priceValue = price.price_usd;
-        
-        // Check if this is a Jupiter price that needs normalization
-        if (price.source === 'jupiter' && priceValue > 1000 && referencePrices[symbol]) {
-          console.log(`Normalizing Jupiter price for ${symbol}: ${priceValue} -> ${referencePrices[symbol]}`);
-          priceValue = referencePrices[symbol];
-        }
-        
-        priceMap.set(symbol, priceValue);
-      }
-    }
-    
-    // For any missing prices, use CoinGecko prices as fallback
-    for (const symbol of normalizedSymbols) {
-      if (!priceMap.has(symbol) && referencePrices[symbol]) {
-        console.log(`Using reference price for ${symbol}: ${referencePrices[symbol]}`);
-        priceMap.set(symbol, referencePrices[symbol]);
+        priceMap.set(symbol, price.price_usd);
       }
     }
     
@@ -222,25 +188,13 @@ const calculateCrossChainPrice = async (
       // Calculate exchange rate (how many destination tokens per source token)
       let exchangeRate = sourcePrice / destPrice;
       
-      // Sanity check for extreme exchange rates
+      // Basic validation for NaN or infinite values
       if (!isFinite(exchangeRate) || isNaN(exchangeRate)) {
         console.warn(`Invalid exchange rate calculated: ${exchangeRate}, using fallback`);
         exchangeRate = 1; // Fallback to 1:1 if calculation fails
       }
       
-      // Cap extreme exchange rates to reasonable values
-      const MAX_RATE = 1000000; // Maximum reasonable exchange rate
-      const MIN_RATE = 0.0000001; // Minimum reasonable exchange rate
-      
-      if (exchangeRate > MAX_RATE) {
-        console.warn(`Exchange rate too high: ${exchangeRate}, capping to ${MAX_RATE}`);
-        exchangeRate = MAX_RATE;
-      } else if (exchangeRate < MIN_RATE) {
-        console.warn(`Exchange rate too low: ${exchangeRate}, capping to ${MIN_RATE}`);
-        exchangeRate = MIN_RATE;
-      }
-      
-      console.log(`Final exchange rate (source price / dest price): ${exchangeRate}`);
+      console.log(`Exchange rate (source price / dest price): ${exchangeRate}`);
       
       // Calculate estimated output
       const amountNum = parseFloat(amount);
