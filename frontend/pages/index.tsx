@@ -1,15 +1,9 @@
 import { useState } from 'react';
 import Head from 'next/head';
 import Header from '@/components/Header';
-import SwapForm from '@/components/SwapForm';
+import SwapForm from '../components/SwapForm';
 
 export default function Home() {
-  const [walletAddress, setWalletAddress] = useState<string | undefined>();
-
-  const handleConnect = (address: string) => {
-    setWalletAddress(address);
-  };
-
   return (
     <>
       <Head>
@@ -19,7 +13,7 @@ export default function Home() {
         <link rel="icon" href="/favicon.ico" />
       </Head>
       <div className="min-h-screen flex flex-col">
-        <Header onConnect={handleConnect} />
+        <Header />
         <main className="flex-1 py-10 px-4">
           <div className="max-w-screen-xl mx-auto">
             <div className="text-center mb-10">
@@ -37,7 +31,7 @@ export default function Home() {
                 </div>
               </div>
             </div>
-            <SwapForm walletAddress={walletAddress} />
+            <SwapForm />
             <div className="mt-10 text-center opacity-75 hover:opacity-100 transition-opacity">
               <p className="text-sm text-gray-400">
                 Infinity DEX is currently in demo mode. No real transactions will be performed.

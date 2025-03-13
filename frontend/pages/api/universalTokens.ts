@@ -1,7 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import axios from 'axios';
-import fs from 'fs';
-import path from 'path';
+import { getAllTokens, getLatestTokenPrices } from '../../lib/db';
 
 // Define the Universal token type
 export type UniversalToken = {
@@ -35,322 +33,42 @@ export type RouteStep = {
   };
 };
 
-// Cache file path
-const CACHE_FILE_PATH = path.join(process.cwd(), '.universal-token-cache.json');
-const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
-
-// Mock Universal.xyz wrapped tokens (in a real implementation, this would come from Universal.xyz API)
-const UNIVERSAL_TOKENS: UniversalToken[] = [
-  // Ethereum tokens and their wrapped versions
-  {
-    symbol: 'ETH',
-    name: 'Ethereum',
-    decimals: 18,
-    address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH address
-    chainId: 1,
-    chainName: 'Ethereum',
-    isWrapped: false,
-    logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/logo.png',
-    wrappedVersion: 'uETH',
-    price: 3000
-  },
-  {
-    symbol: 'uETH',
-    name: 'Universal Ethereum',
-    decimals: 18,
-    address: '0xUniversalETHAddress', // Placeholder
-    chainId: 1,
-    chainName: 'Universal',
-    isWrapped: true,
-    logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/logo.png',
-    unwrappedVersion: 'ETH',
-    price: 3000
-  },
-  {
-    symbol: 'USDC',
-    name: 'USD Coin',
-    decimals: 6,
-    address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-    chainId: 1,
-    chainName: 'Ethereum',
-    isWrapped: false,
-    logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png',
-    wrappedVersion: 'uUSDC',
-    price: 1
-  },
-  {
-    symbol: 'uUSDC',
-    name: 'Universal USD Coin',
-    decimals: 6,
-    address: '0xUniversalUSDCAddress', // Placeholder
-    chainId: 1,
-    chainName: 'Universal',
-    isWrapped: true,
-    logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png',
-    unwrappedVersion: 'USDC',
-    price: 1
-  },
-  
-  // Polygon tokens and their wrapped versions
-  {
-    symbol: 'MATIC',
-    name: 'Polygon',
-    decimals: 18,
-    address: '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270', // WMATIC address
-    chainId: 137,
-    chainName: 'Polygon',
-    isWrapped: false,
-    logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0/logo.png',
-    wrappedVersion: 'uMATIC',
-    price: 0.7
-  },
-  {
-    symbol: 'uMATIC',
-    name: 'Universal Polygon',
-    decimals: 18,
-    address: '0xUniversalMATICAddress', // Placeholder
-    chainId: 137,
-    chainName: 'Universal',
-    isWrapped: true,
-    logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0/logo.png',
-    unwrappedVersion: 'MATIC',
-    price: 0.7
-  },
-  {
-    symbol: 'USDC',
-    name: 'USD Coin',
-    decimals: 6,
-    address: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
-    chainId: 137,
-    chainName: 'Polygon',
-    isWrapped: false,
-    logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png',
-    wrappedVersion: 'uUSDC',
-    price: 1
-  },
-  
-  // Avalanche tokens and their wrapped versions
-  {
-    symbol: 'AVAX',
-    name: 'Avalanche',
-    decimals: 18,
-    address: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7', // WAVAX address
-    chainId: 43114,
-    chainName: 'Avalanche',
-    isWrapped: false,
-    logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/avalanchec/assets/0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7/logo.png',
-    wrappedVersion: 'uAVAX',
-    price: 28
-  },
-  {
-    symbol: 'uAVAX',
-    name: 'Universal Avalanche',
-    decimals: 18,
-    address: '0xUniversalAVAXAddress', // Placeholder
-    chainId: 43114,
-    chainName: 'Universal',
-    isWrapped: true,
-    logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/avalanchec/assets/0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7/logo.png',
-    unwrappedVersion: 'AVAX',
-    price: 28
-  },
-  
-  // Solana tokens and their wrapped versions
-  {
-    symbol: 'SOL',
-    name: 'Solana',
-    decimals: 9,
-    address: 'So11111111111111111111111111111111111111112', // Native SOL address
-    chainId: 999, // Using 999 as Solana chain ID
-    chainName: 'Solana',
-    isWrapped: false,
-    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
-    wrappedVersion: 'uSOL',
-    price: 125
-  },
-  {
-    symbol: 'uSOL',
-    name: 'Universal Solana',
-    decimals: 9,
-    address: '0xUniversalSOLAddress', // Placeholder
-    chainId: 999,
-    chainName: 'Universal',
-    isWrapped: true,
-    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
-    unwrappedVersion: 'SOL',
-    price: 125
-  },
-  {
-    symbol: 'USDC',
-    name: 'USD Coin',
-    decimals: 6,
-    address: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-    chainId: 999,
-    chainName: 'Solana',
-    isWrapped: false,
-    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png',
-    wrappedVersion: 'uUSDC',
-    price: 1
-  },
-  
-  // Solana memecoins
-  {
-    symbol: 'JUP',
-    name: 'Jupiter',
-    decimals: 6,
-    address: 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN',
-    chainId: 999,
-    chainName: 'Solana',
-    isWrapped: false,
-    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN/logo.png',
-    price: 0.65
-  },
-  {
-    symbol: 'BONK',
-    name: 'Bonk',
-    decimals: 5,
-    address: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
-    chainId: 999,
-    chainName: 'Solana',
-    isWrapped: false,
-    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263/logo.png',
-    price: 0.00002
-  },
-  {
-    symbol: 'WIF',
-    name: 'Dogwifhat',
-    decimals: 6,
-    address: 'EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm',
-    chainId: 999,
-    chainName: 'Solana',
-    isWrapped: false,
-    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm/logo.png',
-    price: 1.85
-  },
-  {
-    symbol: 'BOME',
-    name: 'Book of Meme',
-    decimals: 6,
-    address: 'BVg3AJHdNaQjyHfbqR4D4RhV67AjMfYeRQHY7cLMcedt',
-    chainId: 999,
-    chainName: 'Solana',
-    isWrapped: false,
-    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/BVg3AJHdNaQjyHfbqR4D4RhV67AjMfYeRQHY7cLMcedt/logo.png',
-    price: 0.02
-  },
-  {
-    symbol: 'PYTH',
-    name: 'Pyth Network',
-    decimals: 6,
-    address: 'HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3',
-    chainId: 999,
-    chainName: 'Solana',
-    isWrapped: false,
-    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3/logo.png',
-    price: 0.45
-  },
-  {
-    symbol: 'RAY',
-    name: 'Raydium',
-    decimals: 6,
-    address: '4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R',
-    chainId: 999,
-    chainName: 'Solana',
-    isWrapped: false,
-    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R/logo.png',
-    price: 0.35
-  }
-];
-
-// Read cache from file
-const readCache = (): { tokens: UniversalToken[], timestamp: number } | null => {
-  try {
-    if (fs.existsSync(CACHE_FILE_PATH)) {
-      const cacheData = fs.readFileSync(CACHE_FILE_PATH, 'utf8');
-      return JSON.parse(cacheData);
-    }
-  } catch (error) {
-    console.error('Error reading universal token cache:', error);
-  }
-  return null;
+// Default decimals for tokens
+const DEFAULT_DECIMALS: Record<string, number> = {
+  'ETH': 18,
+  'MATIC': 18,
+  'AVAX': 18,
+  'SOL': 9,
+  'USDC': 6,
+  'USDT': 6,
+  'DAI': 18,
+  'WBTC': 8,
+  'BTC': 8,
+  'BONK': 5,
+  'JUP': 6,
+  'RAY': 6,
+  'WIF': 6,
+  'BOME': 6,
+  'PYTH': 6,
 };
 
-// Write cache to file
-const writeCache = (tokens: UniversalToken[]) => {
-  try {
-    const cacheData = JSON.stringify({
-      tokens,
-      timestamp: Date.now()
-    });
-    fs.writeFileSync(CACHE_FILE_PATH, cacheData, 'utf8');
-  } catch (error) {
-    console.error('Error writing universal token cache:', error);
-  }
-};
-
-// Fetch token prices from external API (mock implementation)
-const fetchTokenPrices = async (tokens: UniversalToken[]): Promise<UniversalToken[]> => {
-  try {
-    // In a real implementation, this would call a price API
-    // For now, we'll just use the hardcoded prices
-    return tokens;
-  } catch (error) {
-    console.error('Error fetching token prices:', error);
-    return tokens;
-  }
-};
-
-// Fetch Jupiter verified tokens
-const fetchJupiterTokens = async (includeMemecoinsOnly: boolean = true): Promise<UniversalToken[]> => {
-  try {
-    // Call our jupiterTokens API to get verified tokens
-    const baseUrl = process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : process.env.NODE_ENV === 'development' 
-        ? 'http://localhost:3000' 
-        : '';
-    
-    const response = await axios.get(`${baseUrl}/api/jupiterTokens`, {
-      params: { memecoinsOnly: includeMemecoinsOnly }
-    });
-    
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching Jupiter tokens:', error);
-    return [];
-  }
-};
-
-// Merge tokens, preferring Jupiter tokens when there are duplicates
-const mergeTokens = (universalTokens: UniversalToken[], jupiterTokens: UniversalToken[]): UniversalToken[] => {
-  const mergedTokens = [...universalTokens];
-  
-  // Create a map of existing tokens by address and chain
-  const existingTokenMap = new Map<string, number>();
-  universalTokens.forEach((token, index) => {
-    const key = `${token.address}-${token.chainId}`;
-    existingTokenMap.set(key, index);
-  });
-  
-  // Add or update tokens from Jupiter
-  jupiterTokens.forEach(jupiterToken => {
-    const key = `${jupiterToken.address}-${jupiterToken.chainId}`;
-    const existingIndex = existingTokenMap.get(key);
-    
-    if (existingIndex !== undefined) {
-      // Update existing token with Jupiter data
-      mergedTokens[existingIndex] = {
-        ...mergedTokens[existingIndex],
-        ...jupiterToken,
-        jupiterVerified: true
-      };
-    } else {
-      // Add new token
-      mergedTokens.push(jupiterToken);
-    }
-  });
-  
-  return mergedTokens;
+// Default logo URIs for tokens
+const DEFAULT_LOGO_URI: Record<string, string> = {
+  'ETH': 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/logo.png',
+  'MATIC': 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0/logo.png',
+  'AVAX': 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/avalanchec/assets/0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7/logo.png',
+  'SOL': 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
+  'USDC': 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png',
+  'USDT': 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png',
+  'DAI': 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0x6B175474E89094C44Da98b954EedeAC495271d0F/logo.png',
+  'WBTC': 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599/logo.png',
+  'BTC': 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599/logo.png',
+  'BONK': 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263/logo.png',
+  'JUP': 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN/logo.png',
+  'RAY': 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R/logo.png',
+  'WIF': 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm/logo.png',
+  'BOME': 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/BVg3AJHdNaQjyHfbqR4D4RhV67AjMfYeRQHY7cLMcedt/logo.png',
+  'PYTH': 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3/logo.png',
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -359,53 +77,80 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Check for query parameters to filter tokens
-    const { chainId, search, wrapped, includeJupiter } = req.query;
-    const shouldIncludeJupiter = includeJupiter !== 'false'; // Default to true
+    // Get query parameters
+    const { includeJupiter } = req.query;
+    const includeJupiterTokens = includeJupiter === 'true';
     
-    // Try to read from cache first
-    const cache = readCache();
-    const now = Date.now();
+    // Get tokens from database
+    const dbTokens = await getAllTokens();
+    const latestPrices = await getLatestTokenPrices();
     
-    // Use cached tokens if available and not expired
-    let tokens: UniversalToken[] = [];
-    if (cache && now - cache.timestamp < CACHE_DURATION) {
-      tokens = cache.tokens;
-    } else {
-      // In a real implementation, this would fetch from Universal.xyz API
-      tokens = await fetchTokenPrices(UNIVERSAL_TOKENS);
+    // Create a price map for quick lookup
+    const priceMap = new Map();
+    latestPrices.forEach(price => {
+      priceMap.set(`${price.symbol.toLowerCase()}-${price.chain_id}`, price.price_usd);
+    });
+    
+    // Convert database tokens to universal tokens
+    const universalTokens: UniversalToken[] = dbTokens.map(token => {
+      const priceKey = `${token.symbol.toLowerCase()}-${token.chain_id}`;
+      const price = priceMap.get(priceKey);
       
-      // Fetch Jupiter tokens if requested
-      if (shouldIncludeJupiter) {
-        const jupiterTokens = await fetchJupiterTokens(true); // Only fetch memecoins
-        tokens = mergeTokens(tokens, jupiterTokens);
+      // Create wrapped version symbol if not already wrapped
+      const isWrapped = token.symbol.startsWith('u');
+      const wrappedVersion = isWrapped ? undefined : `u${token.symbol}`;
+      const unwrappedVersion = isWrapped ? token.symbol.substring(1) : undefined;
+      
+      return {
+        symbol: token.symbol,
+        name: token.name,
+        decimals: DEFAULT_DECIMALS[token.symbol.toUpperCase()] || 18,
+        address: token.address || '',
+        chainId: token.chain_id,
+        chainName: token.chain_name,
+        isWrapped: isWrapped,
+        logoURI: DEFAULT_LOGO_URI[token.symbol.toUpperCase()] || 
+                 `https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/logo.png`,
+        wrappedVersion: wrappedVersion,
+        unwrappedVersion: unwrappedVersion,
+        price: price,
+        jupiterVerified: token.is_verified,
+        jupiterVolume: 0 // Default to 0 as we don't have this data
+      };
+    });
+    
+    // Add wrapped versions of tokens if they don't exist
+    const existingSymbols = new Set(universalTokens.map(t => `${t.symbol}-${t.chainId}`));
+    const wrappedTokensToAdd: UniversalToken[] = [];
+    
+    universalTokens.forEach(token => {
+      if (!token.isWrapped && token.wrappedVersion) {
+        const wrappedKey = `${token.wrappedVersion}-${token.chainId}`;
+        if (!existingSymbols.has(wrappedKey)) {
+          wrappedTokensToAdd.push({
+            symbol: token.wrappedVersion,
+            name: `Universal ${token.name}`,
+            decimals: token.decimals,
+            address: `0xUniversal${token.symbol}Address`, // Placeholder
+            chainId: token.chainId,
+            chainName: 'Universal',
+            isWrapped: true,
+            logoURI: token.logoURI,
+            unwrappedVersion: token.symbol,
+            price: token.price,
+            jupiterVerified: false
+          });
+        }
       }
-      
-      writeCache(tokens);
-    }
+    });
     
-    // Apply filters if provided
-    if (chainId) {
-      tokens = tokens.filter(token => token.chainId.toString() === chainId);
-    }
+    // Combine all tokens
+    const allTokens = [...universalTokens, ...wrappedTokensToAdd];
     
-    if (wrapped !== undefined) {
-      const isWrapped = wrapped === 'true';
-      tokens = tokens.filter(token => token.isWrapped === isWrapped);
-    }
-    
-    if (search) {
-      const searchTerm = (search as string).toLowerCase();
-      tokens = tokens.filter(token => 
-        token.symbol.toLowerCase().includes(searchTerm) || 
-        token.name.toLowerCase().includes(searchTerm)
-      );
-    }
-    
-    // Return filtered tokens
-    res.status(200).json(tokens);
+    // Return tokens
+    res.status(200).json(allTokens);
   } catch (error) {
-    console.error('Error handling universal tokens request:', error);
+    console.error('Error fetching universal tokens:', error);
     res.status(500).json({ error: 'Failed to fetch universal tokens' });
   }
 } 

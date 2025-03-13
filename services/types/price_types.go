@@ -6,19 +6,31 @@ import (
 
 // TokenPrice represents a token's price information
 type TokenPrice struct {
-	Symbol        string    `json:"symbol"`
-	Name          string    `json:"name"`
-	Address       string    `json:"address"`
-	ChainID       int64     `json:"chainId"`
-	ChainName     string    `json:"chainName"`
-	PriceUSD      float64   `json:"priceUSD"`
-	Change24h     float64   `json:"change24h"`
-	Volume24h     float64   `json:"volume24h"`
-	MarketCapUSD  float64   `json:"marketCapUSD"`
-	LastUpdated   time.Time `json:"lastUpdated"`
-	Source        string    `json:"source"`
-	IsVerified    bool      `json:"isVerified"`
-	JupiterVolume float64   `json:"jupiterVolume,omitempty"`
+	Symbol        string      `json:"symbol"`
+	Name          string      `json:"name"`
+	Address       string      `json:"address"`
+	ChainID       int64       `json:"chainId"`
+	ChainName     string      `json:"chainName"`
+	PriceUSD      float64     `json:"priceUSD"`
+	Change24h     float64     `json:"change24h"`
+	Volume24h     float64     `json:"volume24h"`
+	MarketCapUSD  float64     `json:"marketCapUSD"`
+	LastUpdated   time.Time   `json:"lastUpdated"`
+	Source        PriceSource `json:"source"`
+	IsVerified    bool        `json:"isVerified"`
+	JupiterVolume float64     `json:"jupiterVolume,omitempty"`
+}
+
+// TokenPriceHistory represents a historical token price record
+type TokenPriceHistory struct {
+	Symbol       string      `json:"symbol"`
+	ChainID      int64       `json:"chainId"`
+	PriceUSD     float64     `json:"priceUSD"`
+	Change24h    float64     `json:"change24h"`
+	Volume24h    float64     `json:"volume24h"`
+	MarketCapUSD float64     `json:"marketCapUSD"`
+	Source       PriceSource `json:"source"`
+	Timestamp    time.Time   `json:"timestamp"`
 }
 
 // PriceSource represents a source of token price data

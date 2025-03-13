@@ -1,4 +1,4 @@
-.PHONY: build test clean run run-worker run-server lint fmt run-frontend run-price-worker build-price-worker
+.PHONY: build test clean run run-worker run-server lint fmt run-frontend run-price-worker build-price-worker init-db
 
 # Build both worker and server binaries
 build:
@@ -84,6 +84,18 @@ start-temporal:
 	temporal server start-dev
 	@echo "Temporal server stopped."
 
+# Initialize database
+init-db:
+	@echo "Initializing database..."
+	@if [ -z "$$(psql -lqt | cut -d \| -f 1 | grep -w infinity_dex)" ]; then \
+		createdb infinity_dex; \
+		echo "Database 'infinity_dex' created."; \
+	else \
+		echo "Database 'infinity_dex' already exists."; \
+	fi
+	psql -d infinity_dex -f db/schema.sql
+	@echo "Database schema initialized."
+
 # Help output
 help:
 	@echo "Available commands:"
@@ -99,6 +111,7 @@ help:
 	@echo "  make run-server    - Run the API server"
 	@echo "  make run-frontend  - Run the frontend development server"
 	@echo "  make init-dev      - Initialize development environment"
+	@echo "  make init-db       - Initialize database"
 	@echo "  make install-temporal-cli - Install Temporal CLI"
 	@echo "  make start-temporal - Start local Temporal server"
 	@echo "  make help          - Show this help" 

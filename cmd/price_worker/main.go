@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/infinity-dex/activities"
+	"github.com/infinity-dex/config"
 	"github.com/infinity-dex/services/types"
 	"github.com/infinity-dex/universalsdk"
 	"github.com/infinity-dex/workflows"
@@ -52,8 +53,23 @@ func main() {
 	}
 	cacheDir := filepath.Join(homeDir, ".infinity-dex", "price-cache")
 
+	// Initialize database connection
+	dbConfig := config.DefaultDBConfig()
+	dbPool, err := config.NewDBPool(dbConfig)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer dbPool.Close()
+
+	// Initialize database schema
+	schemaPath := filepath.Join("db", "schema.sql")
+	if err := config.InitDatabase(dbPool, schemaPath); err != nil {
+		log.Fatalf("Failed to initialize database schema: %v", err)
+	}
+
 	// Initialize activities
 	priceActivities := activities.NewPriceActivities(sdk, cacheDir)
+	dbActivities := activities.NewDBActivities(dbPool)
 
 	// Register workflows
 	w.RegisterWorkflow(workflows.PriceOracleWorkflow)
@@ -66,6 +82,11 @@ func main() {
 	w.RegisterActivity(priceActivities.SavePricesToCacheActivity)
 	w.RegisterActivity(priceActivities.LoadPricesFromCacheActivity)
 	w.RegisterActivity(priceActivities.MergePricesActivity)
+
+	// Register database activities
+	w.RegisterActivity(dbActivities.SavePricesToDatabaseActivity)
+	w.RegisterActivity(dbActivities.GetLatestTokenPricesActivity)
+	w.RegisterActivity(dbActivities.GetTokenPriceHistoryActivity)
 
 	// Start the worker
 	err = w.Start()

@@ -14,7 +14,7 @@ import (
 // 1. Try to load prices from cache
 // 2. If cache is expired or missing, fetch prices from all sources
 // 3. Merge prices from different sources
-// 4. Save merged prices to cache
+// 4. Save merged prices to cache and database
 // 5. Return the prices
 func PriceOracleWorkflow(ctx workflow.Context, request types.PriceFetchRequest) (*types.PriceFetchResult, error) {
 	logger := workflow.GetLogger(ctx)
@@ -140,7 +140,14 @@ func PriceOracleWorkflow(ctx workflow.Context, request types.PriceFetchRequest) 
 		// Continue anyway, just log the error
 	}
 
-	// 5. Return the prices
+	// 5. Save merged prices to database
+	err = workflow.ExecuteActivity(ctx, "SavePricesToDatabaseActivity", mergedPrices).Get(ctx, nil)
+	if err != nil {
+		logger.Error("Failed to save prices to database", "error", err)
+		// Continue anyway, just log the error
+	}
+
+	// 6. Return the prices
 	result.Prices = mergedPrices
 	result.SuccessSources = successSources
 	result.FailedSources = failedSources

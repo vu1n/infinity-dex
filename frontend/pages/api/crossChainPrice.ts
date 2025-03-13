@@ -1,8 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import axios from 'axios';
-import fs from 'fs';
-import path from 'path';
-import { TokenPrice } from './tokenPrices';
+import { getLatestTokenPrices } from '../../lib/db';
 
 // Define the cross-chain price response type
 export type CrossChainPriceResponse = {
@@ -40,61 +37,7 @@ export type RouteStep = {
   };
 };
 
-// Cache file path
-const CACHE_FILE_PATH = path.join(process.cwd(), '.cross-chain-price-cache.json');
-const CACHE_DURATION = 60 * 1000; // 1 minute
-
-// Read cache from file
-const readCache = (): { prices: Record<string, CrossChainPriceResponse>, timestamp: number } | null => {
-  try {
-    if (fs.existsSync(CACHE_FILE_PATH)) {
-      const cacheData = fs.readFileSync(CACHE_FILE_PATH, 'utf8');
-      return JSON.parse(cacheData);
-    }
-  } catch (error) {
-    console.error('Error reading cross-chain price cache:', error);
-  }
-  return null;
-};
-
-// Write cache to file
-const writeCache = (prices: Record<string, CrossChainPriceResponse>) => {
-  try {
-    const cacheData = JSON.stringify({
-      prices,
-      timestamp: Date.now()
-    });
-    fs.writeFileSync(CACHE_FILE_PATH, cacheData, 'utf8');
-  } catch (error) {
-    console.error('Error writing cross-chain price cache:', error);
-  }
-};
-
-// Fallback prices for when API calls fail
-const FALLBACK_PRICES: Record<string, number> = {
-  'eth': 3000,
-  'ethereum': 3000,
-  'usdc': 1,
-  'usd-coin': 1,
-  'matic': 0.75,
-  'matic-network': 0.75,
-  'avax': 30,
-  'avalanche-2': 30,
-  'sol': 150,
-  'solana': 150,
-  'btc': 60000,
-  'bitcoin': 60000,
-  'usdt': 1,
-  'tether': 1,
-  'dai': 1,
-  'bonk': 0.00001,
-  'jup': 0.5,
-  'jupiter': 0.5,
-  'ray': 0.8,
-  'raydium': 0.8
-};
-
-// Get token prices from external API
+// Get token prices from database
 const getTokenPrices = async (symbols: string[]): Promise<Map<string, number>> => {
   try {
     // Normalize symbols
@@ -103,18 +46,17 @@ const getTokenPrices = async (symbols: string[]): Promise<Map<string, number>> =
     // Create a map to store prices
     const priceMap = new Map<string, number>();
     
-    // Fetch prices from tokenPrices API
-    const response = await axios.get('/api/tokenPrices');
-    const prices: TokenPrice[] = response.data;
+    // Fetch prices from database
+    const dbPrices = await getLatestTokenPrices();
     
     // Map prices to symbols
-    for (const price of prices) {
+    for (const price of dbPrices) {
       if (normalizedSymbols.includes(price.symbol.toLowerCase())) {
-        priceMap.set(price.symbol.toLowerCase(), price.current_price);
+        priceMap.set(price.symbol.toLowerCase(), price.price_usd);
       }
     }
     
-    console.log('Received prices:', prices);
+    console.log('Received prices:', dbPrices);
     
     return priceMap;
   } catch (error) {
@@ -244,89 +186,65 @@ const calculateCrossChainPrice = async (
       console.log(`Direct exchange rate (source price / dest price): ${exchangeRate}`);
       
       // Calculate estimated output
-      const inputAmount = parseFloat(amount);
-      const outputAmount = inputAmount * exchangeRate;
+      const amountNum = parseFloat(amount);
+      const estimatedOutput = (amountNum * exchangeRate).toFixed(6);
       
-      // Build the route
-      const route: RouteStep[] = [];
-      const fees: Array<{amount: string, token: string, usdValue: string}> = [];
+      // Create route steps
+      const steps: RouteStep[] = [];
       
-      // If source is not on Universal, wrap it
-      if (!isSourceWrapped && normalizedSourceChain !== 'universal') {
-        route.push({
-          type: 'wrap',
-          fromToken: sourceToken,
-          toToken: sourceTokenWrapped,
-          fromChain: normalizedSourceChain,
-          toChain: 'universal',
-          fee: {
-            amount: (inputAmount * 0.001).toFixed(6), // 0.1% fee
-            token: sourceToken,
-            usdValue: (inputAmount * 0.001 * sourcePrice).toFixed(2)
-          }
-        });
-        fees.push({
-          amount: (inputAmount * 0.001).toFixed(6),
-          token: sourceToken,
-          usdValue: (inputAmount * 0.001 * sourcePrice).toFixed(2)
-        });
-      }
-      
-      // Direct swap on Universal
-      if (normalizedSourceChain !== normalizedDestChain || sourceTokenUnwrapped !== destTokenUnwrapped) {
-        const swapFeePercent = 0.003; // 0.3% fee
-        const swapFeeAmount = inputAmount * swapFeePercent;
-        const swapFeeUsdValue = swapFeeAmount * sourcePrice;
+      // If cross-chain, we need to add wrap/unwrap steps
+      if (normalizedSourceChain !== normalizedDestChain) {
+        // If source is not wrapped, add wrap step
+        if (!isSourceWrapped) {
+          steps.push({
+            type: 'wrap',
+            fromToken: sourceToken,
+            toToken: sourceTokenWrapped,
+            fromChain: normalizedSourceChain,
+            toChain: 'universal',
+            exchangeRate: '1'
+          });
+        }
         
-        route.push({
-          type: 'swap',
+        // Add bridge step
+        steps.push({
+          type: 'bridge',
           fromToken: isSourceWrapped ? sourceToken : sourceTokenWrapped,
           toToken: isDestWrapped ? destinationToken : destTokenWrapped,
           fromChain: isSourceWrapped ? normalizedSourceChain : 'universal',
           toChain: isDestWrapped ? normalizedDestChain : 'universal',
-          exchangeRate: exchangeRate.toString(),
+          exchangeRate: '1',
           fee: {
-            amount: swapFeeAmount.toFixed(6),
+            amount: '0.001',
             token: isSourceWrapped ? sourceToken : sourceTokenWrapped,
-            usdValue: swapFeeUsdValue.toFixed(2)
+            usdValue: (0.001 * sourcePrice).toFixed(2)
           }
         });
-        fees.push({
-          amount: swapFeeAmount.toFixed(6),
-          token: isSourceWrapped ? sourceToken : sourceTokenWrapped,
-          usdValue: swapFeeUsdValue.toFixed(2)
-        });
-      }
-      
-      // If destination is not on Universal, unwrap it
-      if (!isDestWrapped && normalizedDestChain !== 'universal') {
-        const unwrapFeePercent = 0.001; // 0.1% fee
-        const unwrapFeeAmount = outputAmount * unwrapFeePercent;
-        const unwrapFeeUsdValue = unwrapFeeAmount * destPrice;
         
-        route.push({
-          type: 'unwrap',
-          fromToken: destTokenWrapped,
+        // If destination is not wrapped, add unwrap step
+        if (!isDestWrapped) {
+          steps.push({
+            type: 'unwrap',
+            fromToken: destTokenWrapped,
+            toToken: destinationToken,
+            fromChain: 'universal',
+            toChain: normalizedDestChain,
+            exchangeRate: '1'
+          });
+        }
+      } else {
+        // Same chain, just add a swap step
+        steps.push({
+          type: 'swap',
+          fromToken: sourceToken,
           toToken: destinationToken,
-          fromChain: 'universal',
+          fromChain: normalizedSourceChain,
           toChain: normalizedDestChain,
-          fee: {
-            amount: unwrapFeeAmount.toFixed(6),
-            token: destinationToken,
-            usdValue: unwrapFeeUsdValue.toFixed(2)
-          }
-        });
-        fees.push({
-          amount: unwrapFeeAmount.toFixed(6),
-          token: destinationToken,
-          usdValue: unwrapFeeUsdValue.toFixed(2)
+          exchangeRate: exchangeRate.toString()
         });
       }
       
-      // Calculate total fees in USD
-      const totalFeeUsd = fees.reduce((sum, fee) => sum + parseFloat(fee.usdValue), 0);
-      
-      // Return the result
+      // Return the response
       return {
         success: true,
         sourceToken,
@@ -334,168 +252,18 @@ const calculateCrossChainPrice = async (
         destinationToken,
         destinationChain: normalizedDestChain,
         exchangeRate: exchangeRate.toString(),
-        estimatedOutput: outputAmount.toFixed(6),
-        priceImpactPct: 0.5, // Mock price impact
-        route: { steps: route },
-        totalFee: {
-          amount: fees.reduce((sum, fee) => sum + parseFloat(fee.amount), 0).toFixed(6),
-          token: fees[0]?.token || sourceToken,
-          usdValue: totalFeeUsd.toFixed(2)
+        estimatedOutput,
+        priceImpactPct: 0.1, // Mock price impact
+        route: {
+          steps
         }
       };
     }
     
-    // If direct comparison fails, try routing through USDC
-    console.log('Direct comparison failed, routing through USDC');
-    
-    // Get prices in terms of USDC
-    const sourceUsdcPrice = await getTokenUsdcPrice(sourceTokenUnwrapped);
-    const destUsdcPrice = await getTokenUsdcPrice(destTokenUnwrapped);
-    
-    console.log(`USDC prices - Source: ${sourceUsdcPrice}, Destination: ${destUsdcPrice}`);
-    
-    if (sourceUsdcPrice && destUsdcPrice) {
-      // Calculate exchange rate (how many destination tokens per source token)
-      const exchangeRate = sourceUsdcPrice / destUsdcPrice;
-      console.log(`Exchange rate via USDC: ${exchangeRate}`);
-      
-      // Calculate estimated output
-      const inputAmount = parseFloat(amount);
-      const outputAmount = inputAmount * exchangeRate;
-      
-      // Build the route
-      const route: RouteStep[] = [];
-      const fees: Array<{amount: string, token: string, usdValue: string}> = [];
-      
-      // If source is not on Universal, wrap it
-      if (!isSourceWrapped && normalizedSourceChain !== 'universal') {
-        const wrapFeePercent = 0.001; // 0.1% fee
-        const wrapFeeAmount = inputAmount * wrapFeePercent;
-        const wrapFeeUsdValue = wrapFeeAmount * sourceUsdcPrice;
-        
-        route.push({
-          type: 'wrap',
-          fromToken: sourceToken,
-          toToken: sourceTokenWrapped,
-          fromChain: normalizedSourceChain,
-          toChain: 'universal',
-          fee: {
-            amount: wrapFeeAmount.toFixed(6),
-            token: sourceToken,
-            usdValue: wrapFeeUsdValue.toFixed(2)
-          }
-        });
-        fees.push({
-          amount: wrapFeeAmount.toFixed(6),
-          token: sourceToken,
-          usdValue: wrapFeeUsdValue.toFixed(2)
-        });
-      }
-      
-      // Swap to USDC on Universal
-      if (sourceTokenUnwrapped !== 'USDC') {
-        const swapFeePercent = 0.003; // 0.3% fee
-        const swapFeeAmount = inputAmount * swapFeePercent;
-        const swapFeeUsdValue = swapFeeAmount * sourceUsdcPrice;
-        
-        route.push({
-          type: 'swap',
-          fromToken: isSourceWrapped ? sourceToken : sourceTokenWrapped,
-          toToken: 'uUSDC',
-          fromChain: isSourceWrapped ? normalizedSourceChain : 'universal',
-          toChain: 'universal',
-          exchangeRate: sourceUsdcPrice.toString(),
-          fee: {
-            amount: swapFeeAmount.toFixed(6),
-            token: isSourceWrapped ? sourceToken : sourceTokenWrapped,
-            usdValue: swapFeeUsdValue.toFixed(2)
-          }
-        });
-        fees.push({
-          amount: swapFeeAmount.toFixed(6),
-          token: isSourceWrapped ? sourceToken : sourceTokenWrapped,
-          usdValue: swapFeeUsdValue.toFixed(2)
-        });
-      }
-      
-      // Swap from USDC to destination token on Universal
-      if (destTokenUnwrapped !== 'USDC') {
-        const swapFeePercent = 0.003; // 0.3% fee
-        const intermediateAmount = inputAmount * sourceUsdcPrice;
-        const swapFeeAmount = intermediateAmount * swapFeePercent;
-        const swapFeeUsdValue = swapFeeAmount; // USDC is 1:1 with USD
-        
-        route.push({
-          type: 'swap',
-          fromToken: 'uUSDC',
-          toToken: isDestWrapped ? destinationToken : destTokenWrapped,
-          fromChain: 'universal',
-          toChain: isDestWrapped ? normalizedDestChain : 'universal',
-          exchangeRate: (1 / destUsdcPrice).toString(),
-          fee: {
-            amount: swapFeeAmount.toFixed(6),
-            token: 'uUSDC',
-            usdValue: swapFeeUsdValue.toFixed(2)
-          }
-        });
-        fees.push({
-          amount: swapFeeAmount.toFixed(6),
-          token: 'uUSDC',
-          usdValue: swapFeeUsdValue.toFixed(2)
-        });
-      }
-      
-      // If destination is not on Universal, unwrap it
-      if (!isDestWrapped && normalizedDestChain !== 'universal') {
-        const unwrapFeePercent = 0.001; // 0.1% fee
-        const unwrapFeeAmount = outputAmount * unwrapFeePercent;
-        const unwrapFeeUsdValue = unwrapFeeAmount * destUsdcPrice;
-        
-        route.push({
-          type: 'unwrap',
-          fromToken: destTokenWrapped,
-          toToken: destinationToken,
-          fromChain: 'universal',
-          toChain: normalizedDestChain,
-          fee: {
-            amount: unwrapFeeAmount.toFixed(6),
-            token: destinationToken,
-            usdValue: unwrapFeeUsdValue.toFixed(2)
-          }
-        });
-        fees.push({
-          amount: unwrapFeeAmount.toFixed(6),
-          token: destinationToken,
-          usdValue: unwrapFeeUsdValue.toFixed(2)
-        });
-      }
-      
-      // Calculate total fees in USD
-      const totalFeeUsd = fees.reduce((sum, fee) => sum + parseFloat(fee.usdValue), 0);
-      
-      // Return the result
-      return {
-        success: true,
-        sourceToken,
-        sourceChain: normalizedSourceChain,
-        destinationToken,
-        destinationChain: normalizedDestChain,
-        exchangeRate: exchangeRate.toString(),
-        estimatedOutput: outputAmount.toFixed(6),
-        priceImpactPct: 1.0, // Higher price impact for USDC routing
-        route: { steps: route },
-        totalFee: {
-          amount: fees.reduce((sum, fee) => sum + parseFloat(fee.amount), 0).toFixed(6),
-          token: fees[0]?.token || sourceToken,
-          usdValue: totalFeeUsd.toFixed(2)
-        }
-      };
-    }
-    
-    // If all else fails, return an error
+    // If we don't have prices for both tokens, return an error
     return {
       success: false,
-      error: 'Could not calculate price',
+      error: 'Could not find prices for both tokens',
       sourceToken,
       sourceChain: normalizedSourceChain,
       destinationToken,
@@ -503,13 +271,15 @@ const calculateCrossChainPrice = async (
       exchangeRate: '0',
       estimatedOutput: '0',
       priceImpactPct: 0,
-      route: { steps: [] }
+      route: {
+        steps: []
+      }
     };
   } catch (error) {
     console.error('Error calculating cross-chain price:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Failed to calculate cross-chain price',
       sourceToken,
       sourceChain,
       destinationToken,
@@ -517,42 +287,57 @@ const calculateCrossChainPrice = async (
       exchangeRate: '0',
       estimatedOutput: '0',
       priceImpactPct: 0,
-      route: { steps: [] }
+      route: {
+        steps: []
+      }
     };
   }
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-
+  
   try {
-    const { sourceToken, sourceChain, destinationToken, destinationChain, amount } = req.body;
-
-    if (!sourceToken || !sourceChain || !destinationToken || !destinationChain || !amount) {
+    // Get parameters from request body
+    const { sourceChain, destinationChain, sourceToken, destinationToken, amount } = req.body;
+    
+    // Validate required parameters
+    if (!sourceChain || !destinationChain || !sourceToken || !destinationToken || !amount) {
       return res.status(400).json({ 
         success: false,
-        error: 'Missing required parameters' 
+        error: 'Missing required parameters: sourceChain, destinationChain, sourceToken, destinationToken, amount' 
       });
     }
-
-    // Calculate the cross-chain price
-    const priceResponse = await calculateCrossChainPrice(
+    
+    // Calculate cross-chain price
+    const result = await calculateCrossChainPrice(
       sourceToken,
       sourceChain,
       destinationToken,
       destinationChain,
       amount
     );
-
-    // Return the price response
-    res.status(200).json(priceResponse);
+    
+    // Return the result
+    res.status(result.success ? 200 : 400).json(result);
   } catch (error) {
     console.error('Error handling cross-chain price request:', error);
     res.status(500).json({ 
       success: false,
-      error: 'Failed to calculate cross-chain price' 
+      error: 'Failed to calculate cross-chain price',
+      sourceToken: req.body.sourceToken || '',
+      sourceChain: req.body.sourceChain || '',
+      destinationToken: req.body.destinationToken || '',
+      destinationChain: req.body.destinationChain || '',
+      exchangeRate: '0',
+      estimatedOutput: '0',
+      priceImpactPct: 0,
+      route: {
+        steps: []
+      }
     });
   }
 } 
