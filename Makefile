@@ -1,30 +1,19 @@
-.PHONY: build test clean run run-worker run-server lint fmt run-frontend run-price-worker build-price-worker init-db
+.PHONY: build test clean run run-worker run-server lint fmt run-frontend init-db
 
-# Build both worker and server binaries
+# Build server and worker binaries
 build:
 	@echo "Building Infinity DEX binaries..."
 	go build -o bin/worker cmd/worker/main.go
 	go build -o bin/server cmd/server/main.go
-	@echo "Done."
-
-# Build the price worker binary
-build-price-worker:
-	@echo "Building Price Oracle Worker binary..."
 	go build -o bin/price-worker cmd/price_worker/main.go
 	@echo "Done."
 
-# Run all tests with coverage
+# Run tests with coverage
 test:
 	@echo "Running tests with coverage..."
 	go test -v -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Done. See coverage.html for details."
-
-# Run unit tests only (no integration tests)
-test-unit:
-	@echo "Running unit tests..."
-	go test -v -short ./...
-	@echo "Done."
 
 # Clean up artifacts
 clean:
@@ -70,19 +59,8 @@ run-frontend:
 init-dev:
 	@echo "Initializing development environment..."
 	go mod tidy
+	cd frontend && npm install
 	@echo "Done."
-
-# Install Temporal CLI 
-install-temporal-cli:
-	@echo "Installing Temporal CLI..."
-	curl -sSf https://temporal.download/cli.sh | sh
-	@echo "Done. Now you can run 'temporal server start-dev' to start a local Temporal server."
-
-# Start local Temporal server
-start-temporal:
-	@echo "Starting local Temporal server..."
-	temporal server start-dev
-	@echo "Temporal server stopped."
 
 # Initialize database
 init-db:
@@ -96,13 +74,15 @@ init-db:
 	psql -d infinity_dex -f db/schema.sql
 	@echo "Database schema initialized."
 
+# Start all services for development
+start-dev: run-server run-price-worker run-frontend
+	@echo "Starting all development services..."
+
 # Help output
 help:
 	@echo "Available commands:"
-	@echo "  make build         - Build worker and server binaries"
-	@echo "  make build-price-worker - Build price worker binary"
+	@echo "  make build         - Build all binaries"
 	@echo "  make test          - Run all tests with coverage"
-	@echo "  make test-unit     - Run unit tests only"
 	@echo "  make clean         - Clean up artifacts"
 	@echo "  make lint          - Run linter"
 	@echo "  make fmt           - Format code"
@@ -112,6 +92,5 @@ help:
 	@echo "  make run-frontend  - Run the frontend development server"
 	@echo "  make init-dev      - Initialize development environment"
 	@echo "  make init-db       - Initialize database"
-	@echo "  make install-temporal-cli - Install Temporal CLI"
-	@echo "  make start-temporal - Start local Temporal server"
+	@echo "  make start-dev     - Start all development services"
 	@echo "  make help          - Show this help" 
