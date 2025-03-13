@@ -246,36 +246,43 @@ func (a *PriceActivities) FetchJupiterPricesActivity(ctx context.Context, reques
 	logger := activity.GetLogger(ctx)
 	logger.Info("Fetching Jupiter token prices")
 
-	// Jupiter API URL for verified tokens
-	url := "https://api.jup.ag/tokens/v1/tagged/verified"
+	// First, get the list of verified tokens from Jupiter
+	tokensURL := "https://api.jup.ag/tokens/v1/tagged/verified"
 
-	// Make request to Jupiter API
-	resp, err := a.httpClient.Get(url)
+	// Make request to Jupiter tokens API
+	tokensResp, err := a.httpClient.Get(tokensURL)
 	if err != nil {
 		return nil, temporal.NewNonRetryableApplicationError(
-			"Failed to fetch Jupiter prices",
+			"Failed to fetch Jupiter tokens",
 			"JUPITER_API_ERROR",
 			err)
 	}
-	defer resp.Body.Close()
+	defer tokensResp.Body.Close()
 
 	// Check response status
-	if resp.StatusCode != http.StatusOK {
+	if tokensResp.StatusCode != http.StatusOK {
 		return nil, temporal.NewNonRetryableApplicationError(
-			fmt.Sprintf("Jupiter API returned status %d", resp.StatusCode),
+			fmt.Sprintf("Jupiter tokens API returned status %d", tokensResp.StatusCode),
 			"JUPITER_API_ERROR",
 			errors.New("non-200 status code"))
 	}
 
-	// Parse response
-	var jupiterResp []map[string]interface{}
-	body, err := ioutil.ReadAll(resp.Body)
+	// Parse tokens response
+	var jupiterTokens []map[string]interface{}
+	tokensBody, err := ioutil.ReadAll(tokensResp.Body)
 	if err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal(body, &jupiterResp); err != nil {
+	if err := json.Unmarshal(tokensBody, &jupiterTokens); err != nil {
 		return nil, err
 	}
+
+	// Create a map of token addresses to symbols and names
+	tokenInfo := make(map[string]struct {
+		Symbol string
+		Name   string
+		Volume float64
+	})
 
 	// Known memecoin symbols (case insensitive)
 	knownMemecoins := map[string]bool{
@@ -287,9 +294,8 @@ func (a *PriceActivities) FetchJupiterPricesActivity(ctx context.Context, reques
 		"pyth": true, "ray": true, "raydium": true,
 	}
 
-	// Convert to our token price format
-	var prices []types.TokenPrice
-	for _, token := range jupiterResp {
+	// Extract token information
+	for _, token := range jupiterTokens {
 		symbol := token["symbol"].(string)
 		name := token["name"].(string)
 		address := token["address"].(string)
@@ -310,18 +316,78 @@ func (a *PriceActivities) FetchJupiterPricesActivity(ctx context.Context, reques
 			volume = dailyVolume
 		}
 
+		// Store token info
+		tokenInfo[address] = struct {
+			Symbol string
+			Name   string
+			Volume float64
+		}{
+			Symbol: symbol,
+			Name:   name,
+			Volume: volume,
+		}
+	}
+
+	// Now, fetch prices using the Jupiter Price API
+	priceURL := "https://price.jup.ag/v4/price"
+
+	// Make request to Jupiter Price API
+	priceResp, err := a.httpClient.Get(priceURL)
+	if err != nil {
+		return nil, temporal.NewNonRetryableApplicationError(
+			"Failed to fetch Jupiter prices",
+			"JUPITER_API_ERROR",
+			err)
+	}
+	defer priceResp.Body.Close()
+
+	// Check response status
+	if priceResp.StatusCode != http.StatusOK {
+		return nil, temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("Jupiter Price API returned status %d", priceResp.StatusCode),
+			"JUPITER_API_ERROR",
+			errors.New("non-200 status code"))
+	}
+
+	// Parse price response
+	var jupiterPriceResp struct {
+		Data map[string]struct {
+			ID     string  `json:"id"`
+			Mint   string  `json:"mint"`
+			Price  float64 `json:"price"`
+			Change float64 `json:"change24h,omitempty"`
+		} `json:"data"`
+	}
+	priceBody, err := ioutil.ReadAll(priceResp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(priceBody, &jupiterPriceResp); err != nil {
+		return nil, err
+	}
+
+	// Convert to our token price format
+	var prices []types.TokenPrice
+	for mint, priceData := range jupiterPriceResp.Data {
+		// Skip if we don't have token info for this mint
+		info, exists := tokenInfo[mint]
+		if !exists {
+			continue
+		}
+
 		// Add to prices list
 		prices = append(prices, types.TokenPrice{
-			Symbol:        symbol,
-			Name:          name,
-			Address:       address,
+			Symbol:        info.Symbol,
+			Name:          info.Name,
+			Address:       mint,
 			ChainID:       1399811149, // Solana chain ID
 			ChainName:     "solana",
-			PriceUSD:      volume,
+			PriceUSD:      priceData.Price,
+			Change24h:     priceData.Change,
 			LastUpdated:   time.Now(),
 			Source:        types.PriceSourceJupiter,
 			IsVerified:    true,
-			JupiterVolume: volume,
+			JupiterVolume: info.Volume,
 		})
 	}
 
