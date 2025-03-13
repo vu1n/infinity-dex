@@ -399,19 +399,25 @@ const calculateCrossChainPrice = async (
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
+  if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const { sourceToken, sourceChain, destinationToken, destinationChain } = req.query;
+    // Extract parameters from query or body depending on the request method
+    const { sourceToken, sourceChain, destinationToken, destinationChain, amount } = 
+      req.method === 'GET' ? req.query : req.body;
     
-    if (!sourceToken || !sourceChain || !destinationToken || !destinationChain) {
+    if (!sourceToken || !destinationToken) {
       return res.status(400).json({ error: 'Missing required parameters' });
     }
     
+    // Default chains if not provided
+    const srcChain = sourceChain || 'ethereum';
+    const destChain = destinationChain || 'ethereum';
+    
     // Create a cache key
-    const cacheKey = `${sourceToken}-${sourceChain}-${destinationToken}-${destinationChain}`.toLowerCase();
+    const cacheKey = `${sourceToken}-${srcChain}-${destinationToken}-${destChain}`.toLowerCase();
     
     // Try to read from cache first
     const cache = readCache();
@@ -420,15 +426,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Use cached price if available and not expired
     if (cache && now - cache.timestamp < CACHE_DURATION && cache.prices[cacheKey]) {
       console.log(`Using cached price for ${sourceToken} to ${destinationToken}`);
-      return res.status(200).json(cache.prices[cacheKey]);
+      
+      // For POST requests, also include the estimated output based on the amount
+      if (req.method === 'POST' && amount) {
+        const cachedResponse = cache.prices[cacheKey];
+        const inputAmount = parseFloat(amount as string);
+        const exchangeRate = parseFloat(cachedResponse.exchangeRate);
+        const estimatedOutput = (inputAmount * exchangeRate).toString();
+        
+        return res.status(200).json({
+          ...cachedResponse,
+          estimatedOutput,
+          success: true
+        });
+      }
+      
+      return res.status(200).json({
+        ...cache.prices[cacheKey],
+        success: true
+      });
     }
     
     // Calculate cross-chain price
     const priceResponse = await calculateCrossChainPrice(
       sourceToken as string,
-      sourceChain as string,
+      srcChain as string,
       destinationToken as string,
-      destinationChain as string
+      destChain as string
     );
     
     // Update cache
@@ -436,10 +460,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     prices[cacheKey] = priceResponse;
     writeCache(prices);
     
+    // For POST requests, also include the estimated output based on the amount
+    if (req.method === 'POST' && amount) {
+      const inputAmount = parseFloat(amount as string);
+      const exchangeRate = parseFloat(priceResponse.exchangeRate);
+      const estimatedOutput = (inputAmount * exchangeRate).toString();
+      
+      return res.status(200).json({
+        ...priceResponse,
+        estimatedOutput,
+        success: true
+      });
+    }
+    
     // Return price response
-    res.status(200).json(priceResponse);
+    res.status(200).json({
+      ...priceResponse,
+      success: true
+    });
   } catch (error) {
     console.error('Error calculating cross-chain price:', error);
-    res.status(500).json({ error: 'Failed to calculate cross-chain price' });
+    res.status(500).json({ 
+      error: 'Failed to calculate cross-chain price',
+      success: false
+    });
   }
 } 
