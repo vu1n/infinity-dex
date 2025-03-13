@@ -73,9 +73,9 @@ func main() {
 		log.Fatalf("Failed to start worker: %v", err)
 	}
 
-	// Start the scheduled workflow
+	// Start the scheduled workflow with a new ID to avoid nondeterminism issues
 	workflowOptions := client.StartWorkflowOptions{
-		ID:        "scheduled-price-update",
+		ID:        "scheduled-price-update-v2", // New workflow ID
 		TaskQueue: TaskQueue,
 	}
 

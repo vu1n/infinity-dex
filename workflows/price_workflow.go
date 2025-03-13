@@ -1,9 +1,9 @@
 package workflows
 
 import (
+	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/infinity-dex/services/types"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -20,14 +20,15 @@ func PriceOracleWorkflow(ctx workflow.Context, request types.PriceFetchRequest) 
 	logger := workflow.GetLogger(ctx)
 	logger.Info("PriceOracleWorkflow started", "requestID", request.RequestID)
 
-	// If no request ID provided, generate one
+	// If no request ID provided, generate one (deterministic based on workflow ID)
 	if request.RequestID == "" {
-		request.RequestID = uuid.New().String()
+		info := workflow.GetInfo(ctx)
+		request.RequestID = fmt.Sprintf("req-%s", info.WorkflowExecution.ID)
 	}
 
 	// Set timestamp if not provided
 	if request.Timestamp.IsZero() {
-		request.Timestamp = time.Now()
+		request.Timestamp = workflow.Now(ctx)
 	}
 
 	// Initialize result object
@@ -160,21 +161,25 @@ func ScheduledPriceUpdateWorkflow(ctx workflow.Context) error {
 
 	// No need to define cronSchedule here since we're using a fixed interval
 
+	// Counter for deterministic child workflow IDs
+	var runCounter int
+
 	for {
 		// Create a request to fetch all prices
 		request := types.PriceFetchRequest{
-			RequestID: uuid.New().String(),
-			Timestamp: time.Now(),
+			RequestID: fmt.Sprintf("req-%d", runCounter), // Deterministic ID based on counter
+			Timestamp: workflow.Now(ctx),                 // Use workflow.Now instead of time.Now
 			ForceSync: true,
 			Sources:   []string{string(types.PriceSourceCoinGecko), string(types.PriceSourceJupiter)},
 		}
 
+		// Create a deterministic child workflow ID
+		childWorkflowID := fmt.Sprintf("price-oracle-run-%d", runCounter)
+
 		// Execute the price oracle workflow
 		childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			WorkflowID:         "price-oracle-" + request.RequestID,
+			WorkflowID:         childWorkflowID,
 			WorkflowRunTimeout: 2 * time.Minute,
-			// To use cron scheduling, uncomment and add this to the parent workflow options:
-			// CronSchedule: "*/15 * * * * *", // Every 15 seconds (note the extra * for seconds)
 		})
 
 		var result types.PriceFetchResult
@@ -188,8 +193,11 @@ func ScheduledPriceUpdateWorkflow(ctx workflow.Context) error {
 				"failedSources", result.FailedSources)
 		}
 
+		// Increment counter for next run
+		runCounter++
+
 		// Sleep for 15 seconds before the next run
-		sleepDuration := 15 * time.Second // Changed from 15 * time.Minute
+		sleepDuration := 15 * time.Second
 		logger.Info("Sleeping until next scheduled run", "duration", sleepDuration)
 
 		if err := workflow.Sleep(ctx, sleepDuration); err != nil {
