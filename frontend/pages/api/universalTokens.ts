@@ -16,6 +16,8 @@ export type UniversalToken = {
   wrappedVersion?: string; // Symbol of the wrapped version (e.g., "uETH" for "ETH")
   unwrappedVersion?: string; // Symbol of the unwrapped version (e.g., "ETH" for "uETH")
   price?: number; // Current price in USD
+  jupiterVerified?: boolean; // Whether the token is verified by Jupiter
+  jupiterVolume?: number; // Daily volume on Jupiter
 };
 
 // Define a route step for multi-hop routes
@@ -29,6 +31,7 @@ export type RouteStep = {
   fee?: {
     amount: string;
     token: string;
+    usdValue?: string;
   };
 };
 
@@ -297,6 +300,59 @@ const fetchTokenPrices = async (tokens: UniversalToken[]): Promise<UniversalToke
   }
 };
 
+// Fetch Jupiter verified tokens
+const fetchJupiterTokens = async (includeMemecoinsOnly: boolean = true): Promise<UniversalToken[]> => {
+  try {
+    // Call our jupiterTokens API to get verified tokens
+    const baseUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : process.env.NODE_ENV === 'development' 
+        ? 'http://localhost:3000' 
+        : '';
+    
+    const response = await axios.get(`${baseUrl}/api/jupiterTokens`, {
+      params: { memecoinsOnly: includeMemecoinsOnly }
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching Jupiter tokens:', error);
+    return [];
+  }
+};
+
+// Merge tokens, preferring Jupiter tokens when there are duplicates
+const mergeTokens = (universalTokens: UniversalToken[], jupiterTokens: UniversalToken[]): UniversalToken[] => {
+  const mergedTokens = [...universalTokens];
+  
+  // Create a map of existing tokens by address and chain
+  const existingTokenMap = new Map<string, number>();
+  universalTokens.forEach((token, index) => {
+    const key = `${token.address}-${token.chainId}`;
+    existingTokenMap.set(key, index);
+  });
+  
+  // Add or update tokens from Jupiter
+  jupiterTokens.forEach(jupiterToken => {
+    const key = `${jupiterToken.address}-${jupiterToken.chainId}`;
+    const existingIndex = existingTokenMap.get(key);
+    
+    if (existingIndex !== undefined) {
+      // Update existing token with Jupiter data
+      mergedTokens[existingIndex] = {
+        ...mergedTokens[existingIndex],
+        ...jupiterToken,
+        jupiterVerified: true
+      };
+    } else {
+      // Add new token
+      mergedTokens.push(jupiterToken);
+    }
+  });
+  
+  return mergedTokens;
+};
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -304,7 +360,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     // Check for query parameters to filter tokens
-    const { chainId, search, wrapped } = req.query;
+    const { chainId, search, wrapped, includeJupiter } = req.query;
+    const shouldIncludeJupiter = includeJupiter !== 'false'; // Default to true
     
     // Try to read from cache first
     const cache = readCache();
@@ -317,6 +374,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } else {
       // In a real implementation, this would fetch from Universal.xyz API
       tokens = await fetchTokenPrices(UNIVERSAL_TOKENS);
+      
+      // Fetch Jupiter tokens if requested
+      if (shouldIncludeJupiter) {
+        const jupiterTokens = await fetchJupiterTokens(true); // Only fetch memecoins
+        tokens = mergeTokens(tokens, jupiterTokens);
+      }
+      
       writeCache(tokens);
     }
     

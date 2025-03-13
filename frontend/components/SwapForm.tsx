@@ -124,7 +124,7 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
     const fetchTokens = async () => {
       try {
         setSwapState(prev => ({ ...prev, isLoadingTokens: true }));
-        const response = await fetch('/api/universalTokens');
+        const response = await fetch('/api/universalTokens?includeJupiter=true');
         
         if (!response.ok) {
           throw new Error('Failed to fetch tokens');

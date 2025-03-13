@@ -13,6 +13,8 @@ export interface Token {
   isWrapped?: boolean;
   wrappedVersion?: string;
   unwrappedVersion?: string;
+  jupiterVerified?: boolean;
+  jupiterVolume?: number;
 }
 
 // Define the props for the TokenSelector component
@@ -107,6 +109,7 @@ const TokenSelector: React.FC<Props> = ({
   const [filteredTokens, setFilteredTokens] = useState<Token[]>(tokens);
   const [selectedChain, setSelectedChain] = useState<string | null>(null);
   const [uniqueChains, setUniqueChains] = useState<string[]>([]);
+  const [showJupiterOnly, setShowJupiterOnly] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
@@ -133,7 +136,7 @@ const TokenSelector: React.FC<Props> = ({
     setFilteredTokens(tokens);
   }, [tokens]);
 
-  // Filter tokens based on search query and selected chain
+  // Filter tokens based on search query, selected chain, and Jupiter verification
   useEffect(() => {
     let filtered = tokens;
     
@@ -151,8 +154,13 @@ const TokenSelector: React.FC<Props> = ({
       filtered = filtered.filter(token => token.chainName === selectedChain);
     }
     
+    // Filter by Jupiter verification
+    if (showJupiterOnly) {
+      filtered = filtered.filter(token => token.jupiterVerified === true);
+    }
+    
     setFilteredTokens(filtered);
-  }, [searchQuery, selectedChain, tokens]);
+  }, [searchQuery, selectedChain, showJupiterOnly, tokens]);
 
   // Handle token selection
   const handleSelectToken = (token: Token) => {
@@ -165,6 +173,14 @@ const TokenSelector: React.FC<Props> = ({
   const handleSelectChain = (chain: string | null) => {
     setSelectedChain(chain);
   };
+
+  // Toggle Jupiter verified filter
+  const toggleJupiterFilter = () => {
+    setShowJupiterOnly(!showJupiterOnly);
+  };
+
+  // Check if any tokens are Jupiter verified
+  const hasJupiterTokens = tokens.some(token => token.jupiterVerified);
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -185,6 +201,9 @@ const TokenSelector: React.FC<Props> = ({
             )}
             <span className="font-medium text-white">{selectedToken.symbol}</span>
             <span className="text-xs text-gray-400">({selectedToken.chainName})</span>
+            {selectedToken.jupiterVerified && (
+              <span className="ml-1 text-xs bg-blue-500/20 text-blue-400 px-1 rounded">Jupiter</span>
+            )}
           </>
         ) : isLoading ? (
           <div className="flex items-center">
@@ -214,33 +233,49 @@ const TokenSelector: React.FC<Props> = ({
               autoFocus
             />
             
-            {showChainFilter && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                <button
-                  onClick={() => handleSelectChain(null)}
-                  className={`text-xs px-2 py-1 rounded-full ${
-                    selectedChain === null 
-                      ? 'bg-primary text-white' 
-                      : 'bg-surface-light text-gray-300 hover:bg-surface-light'
-                  }`}
-                >
-                  All Chains
-                </button>
-                {uniqueChains.map(chain => (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {showChainFilter && (
+                <>
                   <button
-                    key={chain}
-                    onClick={() => handleSelectChain(chain)}
+                    onClick={() => handleSelectChain(null)}
                     className={`text-xs px-2 py-1 rounded-full ${
-                      selectedChain === chain 
+                      selectedChain === null 
                         ? 'bg-primary text-white' 
                         : 'bg-surface-light text-gray-300 hover:bg-surface-light'
                     }`}
                   >
-                    {chain}
+                    All Chains
                   </button>
-                ))}
-              </div>
-            )}
+                  {uniqueChains.map(chain => (
+                    <button
+                      key={chain}
+                      onClick={() => handleSelectChain(chain)}
+                      className={`text-xs px-2 py-1 rounded-full ${
+                        selectedChain === chain 
+                          ? 'bg-primary text-white' 
+                          : 'bg-surface-light text-gray-300 hover:bg-surface-light'
+                      }`}
+                    >
+                      {chain}
+                    </button>
+                  ))}
+                </>
+              )}
+              
+              {/* Jupiter verified filter */}
+              {hasJupiterTokens && (
+                <button
+                  onClick={toggleJupiterFilter}
+                  className={`text-xs px-2 py-1 rounded-full ${
+                    showJupiterOnly 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-surface-light text-gray-300 hover:bg-surface-light'
+                  }`}
+                >
+                  Jupiter Verified
+                </button>
+              )}
+            </div>
           </div>
           
           <div className="max-h-60 overflow-y-auto">
@@ -252,49 +287,58 @@ const TokenSelector: React.FC<Props> = ({
                 </svg>
                 <span className="text-white">Loading tokens...</span>
               </div>
-            ) : filteredTokens.length > 0 ? (
+            ) : filteredTokens.length === 0 ? (
+              <div className="p-4 text-center text-gray-400">
+                No tokens found
+              </div>
+            ) : (
               filteredTokens.map(token => (
                 <button
                   key={`${token.symbol}-${token.chainId}`}
                   onClick={() => handleSelectToken(token)}
-                  className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-surface-light transition-colors text-left"
+                  className="w-full flex items-center p-3 hover:bg-background transition-colors"
                 >
-                  {token.logoURI && (
+                  {token.logoURI ? (
                     <img 
                       src={token.logoURI} 
                       alt={token.symbol} 
-                      className="w-8 h-8 rounded-full"
+                      className="w-8 h-8 rounded-full mr-3"
                       onError={(e) => {
                         // Fallback for broken images
-                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/32?text=' + token.symbol.charAt(0);
+                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/32';
                       }}
                     />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-surface-light mr-3 flex items-center justify-center">
+                      <span className="text-xs font-bold">{token.symbol.substring(0, 2)}</span>
+                    </div>
                   )}
-                  <div>
-                    <div className="font-medium text-white">{token.symbol}</div>
-                    <div className="text-xs text-gray-400 flex items-center">
+                  <div className="flex-1 text-left">
+                    <div className="flex items-center">
+                      <span className="font-medium text-white">{token.symbol}</span>
+                      {token.jupiterVerified && (
+                        <span className="ml-1 text-xs bg-blue-500/20 text-blue-400 px-1 rounded">Jupiter</span>
+                      )}
+                    </div>
+                    <div className="flex items-center text-xs text-gray-400">
                       <span>{token.name}</span>
                       <span className="mx-1">•</span>
                       <span>{token.chainName}</span>
-                      {token.isWrapped && (
+                      {token.jupiterVolume && token.jupiterVolume > 0 && (
                         <>
                           <span className="mx-1">•</span>
-                          <span className="text-primary-light">Universal</span>
+                          <span>${(token.jupiterVolume / 1000000).toFixed(2)}M vol</span>
                         </>
                       )}
                     </div>
                   </div>
                   {token.price && (
-                    <div className="ml-auto text-right">
-                      <div className="text-sm text-gray-300">${token.price.toLocaleString()}</div>
+                    <div className="text-right">
+                      <div className="text-white">${token.price < 0.01 ? token.price.toExponential(2) : token.price.toFixed(2)}</div>
                     </div>
                   )}
                 </button>
               ))
-            ) : (
-              <div className="p-4 text-center text-gray-400">
-                No tokens found matching "{searchQuery}"
-              </div>
             )}
           </div>
         </div>
