@@ -197,6 +197,14 @@ const TokenSelector: React.FC<Props> = ({
                 src={selectedToken.logoURI} 
                 alt={selectedToken.symbol} 
                 className="w-6 h-6 rounded-full"
+                onError={(e) => {
+                  // Fallback for broken images
+                  if (selectedToken.chainName === 'Solana') {
+                    (e.target as HTMLImageElement).src = 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png';
+                  } else {
+                    (e.target as HTMLImageElement).src = 'https://via.placeholder.com/32';
+                  }
+                }}
               />
             )}
             <span className="font-medium text-white">{selectedToken.symbol}</span>
@@ -305,7 +313,11 @@ const TokenSelector: React.FC<Props> = ({
                       className="w-8 h-8 rounded-full mr-3"
                       onError={(e) => {
                         // Fallback for broken images
-                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/32';
+                        if (token.chainName === 'Solana') {
+                          (e.target as HTMLImageElement).src = 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png';
+                        } else {
+                          (e.target as HTMLImageElement).src = 'https://via.placeholder.com/32';
+                        }
                       }}
                     />
                   ) : (

@@ -186,23 +186,45 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
   // Handle source token selection
   const handleSourceTokenSelect = (token: Token) => {
     console.log('Selected source token:', token);
-    setSwapState(prev => ({
-      ...prev,
-      sourceToken: token,
-      // Reset destination amount when source token changes
-      destinationAmount: ''
-    }));
+    setSwapState(prev => {
+      const newState = {
+        ...prev,
+        sourceToken: token,
+        // Reset destination amount when source token changes
+        destinationAmount: ''
+      };
+      
+      // Fetch price if both tokens are selected and we have an amount
+      if (newState.destinationToken && newState.sourceAmount && parseFloat(newState.sourceAmount) > 0) {
+        setTimeout(() => {
+          fetchPriceDirectly(token, newState.destinationToken, newState.sourceAmount);
+        }, 0);
+      }
+      
+      return newState;
+    });
   };
 
   // Handle destination token selection
   const handleDestinationTokenSelect = (token: Token) => {
     console.log('Selected destination token:', token);
-    setSwapState(prev => ({
-      ...prev,
-      destinationToken: token,
-      // Reset destination amount when destination token changes
-      destinationAmount: ''
-    }));
+    setSwapState(prev => {
+      const newState = {
+        ...prev,
+        destinationToken: token,
+        // Reset destination amount when destination token changes
+        destinationAmount: ''
+      };
+      
+      // Fetch price if both tokens are selected and we have an amount
+      if (newState.sourceToken && newState.sourceAmount && parseFloat(newState.sourceAmount) > 0) {
+        setTimeout(() => {
+          fetchPriceDirectly(newState.sourceToken, token, newState.sourceAmount);
+        }, 0);
+      }
+      
+      return newState;
+    });
   };
 
   // Handle source amount change
@@ -537,6 +559,59 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
       </div>
     );
   };
+
+  // Refresh token prices periodically
+  useEffect(() => {
+    // Function to refresh token data
+    const refreshTokenData = async () => {
+      try {
+        const response = await fetch('/api/universalTokens?includeJupiter=true');
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch tokens');
+        }
+        
+        const data = await response.json();
+        
+        // Update available tokens with fresh data
+        setSwapState(prev => {
+          // Find the current tokens in the new data to get updated prices
+          const updatedSourceToken = prev.sourceToken 
+            ? data.find((t: Token) => 
+                t.symbol === prev.sourceToken?.symbol && 
+                t.chainName === prev.sourceToken?.chainName
+              ) || prev.sourceToken
+            : prev.sourceToken;
+            
+          const updatedDestToken = prev.destinationToken
+            ? data.find((t: Token) => 
+                t.symbol === prev.destinationToken?.symbol && 
+                t.chainName === prev.destinationToken?.chainName
+              ) || prev.destinationToken
+            : prev.destinationToken;
+          
+          return {
+            ...prev,
+            availableTokens: data,
+            sourceToken: updatedSourceToken,
+            destinationToken: updatedDestToken
+          };
+        });
+        
+      } catch (error) {
+        console.error('Error refreshing token data:', error);
+      }
+    };
+    
+    // Refresh immediately
+    refreshTokenData();
+    
+    // Set up interval to refresh every 30 seconds
+    const intervalId = setInterval(refreshTokenData, 30000);
+    
+    // Clean up interval on component unmount
+    return () => clearInterval(intervalId);
+  }, []);
 
   // Render the swap form
   return (
