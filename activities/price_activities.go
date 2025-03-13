@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -390,13 +391,39 @@ func (a *PriceActivities) FetchJupiterPricesActivity(ctx context.Context, reques
 	}
 	if err := json.Unmarshal(priceBody, &jupiterPriceResp); err != nil {
 		logger.Error("Failed to parse Jupiter price response", "error", err)
-		// Log a sample of the response body for debugging
-		if len(priceBody) > 200 {
-			logger.Info("Jupiter price response sample", "body", string(priceBody[:200])+"...")
-		} else {
-			logger.Info("Jupiter price response", "body", string(priceBody))
+
+		// The API response format has changed, try parsing the new format
+		var newFormatResp struct {
+			Data map[string]struct {
+				ID    string `json:"id"`
+				Type  string `json:"type"`
+				Price string `json:"price"`
+			} `json:"data"`
 		}
-		return nil, err
+
+		if err := json.Unmarshal(priceBody, &newFormatResp); err != nil {
+			// Log a sample of the response body for debugging
+			if len(priceBody) > 200 {
+				logger.Info("Jupiter price response sample", "body", string(priceBody[:200])+"...")
+			} else {
+				logger.Info("Jupiter price response", "body", string(priceBody))
+			}
+			return nil, err
+		}
+
+		// Convert the new format to our expected map
+		jupiterPriceResp = make(map[string]float64)
+		for mint, priceData := range newFormatResp.Data {
+			// Convert string price to float64
+			price, err := strconv.ParseFloat(priceData.Price, 64)
+			if err != nil {
+				logger.Warn("Failed to parse price as float", "mint", mint, "price_str", priceData.Price)
+				continue
+			}
+			jupiterPriceResp[mint] = price
+		}
+
+		logger.Info("Successfully parsed Jupiter price data using new format", "count", len(jupiterPriceResp))
 	}
 
 	logger.Info("Received Jupiter price data", "count", len(jupiterPriceResp))
