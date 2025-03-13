@@ -15,6 +15,21 @@ export type UniversalToken = {
   logoURI: string;
   wrappedVersion?: string; // Symbol of the wrapped version (e.g., "uETH" for "ETH")
   unwrappedVersion?: string; // Symbol of the unwrapped version (e.g., "ETH" for "uETH")
+  price?: number; // Current price in USD
+};
+
+// Define a route step for multi-hop routes
+export type RouteStep = {
+  fromToken: string;
+  fromChain: string;
+  toToken: string;
+  toChain: string;
+  exchangeRate: string;
+  type: 'swap' | 'bridge' | 'wrap' | 'unwrap';
+  fee?: {
+    amount: string;
+    token: string;
+  };
 };
 
 // Cache file path
@@ -34,6 +49,7 @@ const UNIVERSAL_TOKENS: UniversalToken[] = [
     isWrapped: false,
     logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/logo.png',
     wrappedVersion: 'uETH',
+    price: 3000
   },
   {
     symbol: 'uETH',
@@ -45,6 +61,7 @@ const UNIVERSAL_TOKENS: UniversalToken[] = [
     isWrapped: true,
     logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/logo.png',
     unwrappedVersion: 'ETH',
+    price: 3000
   },
   {
     symbol: 'USDC',
@@ -56,6 +73,7 @@ const UNIVERSAL_TOKENS: UniversalToken[] = [
     isWrapped: false,
     logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png',
     wrappedVersion: 'uUSDC',
+    price: 1
   },
   {
     symbol: 'uUSDC',
@@ -67,6 +85,7 @@ const UNIVERSAL_TOKENS: UniversalToken[] = [
     isWrapped: true,
     logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png',
     unwrappedVersion: 'USDC',
+    price: 1
   },
   
   // Polygon tokens and their wrapped versions
@@ -80,6 +99,7 @@ const UNIVERSAL_TOKENS: UniversalToken[] = [
     isWrapped: false,
     logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0/logo.png',
     wrappedVersion: 'uMATIC',
+    price: 0.7
   },
   {
     symbol: 'uMATIC',
@@ -91,6 +111,7 @@ const UNIVERSAL_TOKENS: UniversalToken[] = [
     isWrapped: true,
     logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0/logo.png',
     unwrappedVersion: 'MATIC',
+    price: 0.7
   },
   {
     symbol: 'USDC',
@@ -102,6 +123,7 @@ const UNIVERSAL_TOKENS: UniversalToken[] = [
     isWrapped: false,
     logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png',
     wrappedVersion: 'uUSDC',
+    price: 1
   },
   
   // Avalanche tokens and their wrapped versions
@@ -115,6 +137,7 @@ const UNIVERSAL_TOKENS: UniversalToken[] = [
     isWrapped: false,
     logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/avalanchec/assets/0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7/logo.png',
     wrappedVersion: 'uAVAX',
+    price: 28
   },
   {
     symbol: 'uAVAX',
@@ -126,6 +149,7 @@ const UNIVERSAL_TOKENS: UniversalToken[] = [
     isWrapped: true,
     logoURI: 'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/avalanchec/assets/0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7/logo.png',
     unwrappedVersion: 'AVAX',
+    price: 28
   },
   
   // Solana tokens and their wrapped versions
@@ -139,6 +163,7 @@ const UNIVERSAL_TOKENS: UniversalToken[] = [
     isWrapped: false,
     logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
     wrappedVersion: 'uSOL',
+    price: 125
   },
   {
     symbol: 'uSOL',
@@ -150,7 +175,88 @@ const UNIVERSAL_TOKENS: UniversalToken[] = [
     isWrapped: true,
     logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
     unwrappedVersion: 'SOL',
+    price: 125
   },
+  {
+    symbol: 'USDC',
+    name: 'USD Coin',
+    decimals: 6,
+    address: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+    chainId: 999,
+    chainName: 'Solana',
+    isWrapped: false,
+    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png',
+    wrappedVersion: 'uUSDC',
+    price: 1
+  },
+  
+  // Solana memecoins
+  {
+    symbol: 'JUP',
+    name: 'Jupiter',
+    decimals: 6,
+    address: 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN',
+    chainId: 999,
+    chainName: 'Solana',
+    isWrapped: false,
+    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN/logo.png',
+    price: 0.65
+  },
+  {
+    symbol: 'BONK',
+    name: 'Bonk',
+    decimals: 5,
+    address: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+    chainId: 999,
+    chainName: 'Solana',
+    isWrapped: false,
+    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263/logo.png',
+    price: 0.00002
+  },
+  {
+    symbol: 'WIF',
+    name: 'Dogwifhat',
+    decimals: 6,
+    address: 'EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm',
+    chainId: 999,
+    chainName: 'Solana',
+    isWrapped: false,
+    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm/logo.png',
+    price: 1.85
+  },
+  {
+    symbol: 'BOME',
+    name: 'Book of Meme',
+    decimals: 6,
+    address: 'BVg3AJHdNaQjyHfbqR4D4RhV67AjMfYeRQHY7cLMcedt',
+    chainId: 999,
+    chainName: 'Solana',
+    isWrapped: false,
+    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/BVg3AJHdNaQjyHfbqR4D4RhV67AjMfYeRQHY7cLMcedt/logo.png',
+    price: 0.02
+  },
+  {
+    symbol: 'PYTH',
+    name: 'Pyth Network',
+    decimals: 6,
+    address: 'HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3',
+    chainId: 999,
+    chainName: 'Solana',
+    isWrapped: false,
+    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3/logo.png',
+    price: 0.45
+  },
+  {
+    symbol: 'RAY',
+    name: 'Raydium',
+    decimals: 6,
+    address: '4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R',
+    chainId: 999,
+    chainName: 'Solana',
+    isWrapped: false,
+    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R/logo.png',
+    price: 0.35
+  }
 ];
 
 // Read cache from file
@@ -179,6 +285,18 @@ const writeCache = (tokens: UniversalToken[]) => {
   }
 };
 
+// Fetch token prices from external API (mock implementation)
+const fetchTokenPrices = async (tokens: UniversalToken[]): Promise<UniversalToken[]> => {
+  try {
+    // In a real implementation, this would call a price API
+    // For now, we'll just use the hardcoded prices
+    return tokens;
+  } catch (error) {
+    console.error('Error fetching token prices:', error);
+    return tokens;
+  }
+};
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -198,16 +316,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       tokens = cache.tokens;
     } else {
       // In a real implementation, this would fetch from Universal.xyz API
-      tokens = UNIVERSAL_TOKENS;
-      
-      // Update cache
+      tokens = await fetchTokenPrices(UNIVERSAL_TOKENS);
       writeCache(tokens);
     }
     
-    // Apply filters
+    // Apply filters if provided
     if (chainId) {
-      const chainIdNum = parseInt(chainId as string, 10);
-      tokens = tokens.filter(token => token.chainId === chainIdNum);
+      tokens = tokens.filter(token => token.chainId.toString() === chainId);
     }
     
     if (wrapped !== undefined) {
@@ -219,15 +334,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const searchTerm = (search as string).toLowerCase();
       tokens = tokens.filter(token => 
         token.symbol.toLowerCase().includes(searchTerm) || 
-        token.name.toLowerCase().includes(searchTerm) ||
-        token.address.toLowerCase().includes(searchTerm)
+        token.name.toLowerCase().includes(searchTerm)
       );
     }
     
-    // Return tokens
+    // Return filtered tokens
     res.status(200).json(tokens);
   } catch (error) {
-    console.error('Error fetching universal tokens:', error);
+    console.error('Error handling universal tokens request:', error);
     res.status(500).json({ error: 'Failed to fetch universal tokens' });
   }
 } 
