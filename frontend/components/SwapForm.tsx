@@ -17,6 +17,21 @@ interface Token {
   isWrapped?: boolean;
 }
 
+// Define the step in a swap route
+interface RouteStep {
+  type: 'swap' | 'bridge';
+  fromToken: string;
+  toToken: string;
+  fromChain: string;
+  toChain: string;
+  exchangeRate?: string;
+}
+
+// Define the route for a swap
+interface Route {
+  steps: RouteStep[];
+}
+
 // Define the props for the SwapForm component
 interface SwapFormProps {
   className?: string;
@@ -32,7 +47,7 @@ interface SwapState {
   isLoading: boolean;
   error: string | null;
   exchangeRate: string;
-  route: any;
+  route: Route | null;
   transactionHash: string | null;
   transactionStatus: 'pending' | 'completed' | 'failed' | null;
 }
@@ -125,7 +140,7 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
         value !== '' && 
         parseFloat(value) > 0
       ) {
-        fetchPriceQuote(value);
+        fetchPrice();
       } else {
         // Reset destination amount if source amount is invalid
         setSwapState(prev => ({
@@ -138,68 +153,72 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
     }
   };
 
-  // Fetch price quote for the swap
-  const fetchPriceQuote = useCallback(async (amount: string) => {
-    if (!swapState.sourceToken || !swapState.destinationToken) return;
+  // Fetch price quote for the selected tokens
+  const fetchPrice = useCallback(async () => {
+    if (!swapState.sourceToken || !swapState.destinationToken || !swapState.sourceAmount) {
+      return;
+    }
+
+    setSwapState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      setSwapState(prev => ({ ...prev, isLoading: true, error: null }));
+      const sourceSymbol = swapState.sourceToken.symbol;
+      const destSymbol = swapState.destinationToken.symbol;
+      const amount = swapState.sourceAmount;
       
-      console.log('Fetching price quote for:', {
-        sourceToken: swapState.sourceToken?.symbol,
-        destinationToken: swapState.destinationToken?.symbol,
-        amount
-      });
-
-      // Determine if this is a cross-chain swap
-      const isCrossChain = swapState.sourceToken.chainId !== swapState.destinationToken.chainId;
-      console.log('Is cross-chain swap:', isCrossChain);
-
       let outputAmount = '0';
       let exchangeRate = '0';
-      let route = null;
+      let route: Route | null = null;
 
-      if (isCrossChain) {
-        // For cross-chain swaps, use the cross-chain price API
+      // Check if cross-chain swap
+      if (swapState.sourceToken.chainName !== swapState.destinationToken.chainName) {
+        console.log('Fetching cross-chain price...');
+        
+        // Call the cross-chain price API
         const response = await fetch('/api/crossChainPrice', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify({
-            sourceToken: swapState.sourceToken.symbol,
-            destinationToken: swapState.destinationToken.symbol,
+            sourceToken: sourceSymbol,
+            sourceChain: swapState.sourceToken.chainName.toLowerCase(),
+            destinationToken: destSymbol,
+            destinationChain: swapState.destinationToken.chainName.toLowerCase(),
             amount
-          })
+          }),
         });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch cross-chain price');
+        }
 
         const data = await response.json();
         console.log('Cross-chain price data:', data);
-
-        if (data.success) {
-          outputAmount = data.estimatedOutput;
-          exchangeRate = data.exchangeRate;
-          route = data.route;
-        } else {
-          throw new Error(data.error || 'Failed to fetch cross-chain price');
-        }
-      } else {
-        // For same-chain swaps, use a simpler calculation
-        // This is a simplified example - in a real app, you'd call a price API
-        const mockExchangeRates: Record<string, Record<string, number>> = {
-          'ETH': { 'USDC': 1900, 'ETH': 1 },
-          'USDC': { 'ETH': 1/1900, 'USDC': 1 },
-          'SOL': { 'USDC': 125, 'SOL': 1 },
-          'MATIC': { 'USDC': 0.75, 'MATIC': 1 },
-          'AVAX': { 'USDC': 30, 'AVAX': 1 }
-        };
-
-        const sourceSymbol = swapState.sourceToken.symbol;
-        const destSymbol = swapState.destinationToken.symbol;
         
-        // Get exchange rate or use 1 if not found
-        const rate = mockExchangeRates[sourceSymbol]?.[destSymbol] || 1;
+        if (!data.success) {
+          throw new Error(data.error || 'Failed to calculate price');
+        }
+        
+        outputAmount = data.estimatedOutput;
+        exchangeRate = data.exchangeRate;
+        route = data.route;
+      } else {
+        console.log('Calculating same-chain swap...');
+        
+        // Mock exchange rates for same-chain swaps (in a real app, this would come from an API)
+        const mockExchangeRates: Record<string, Record<string, number>> = {
+          'ETH': { 'USDC': 1800, 'SOL': 15 },
+          'USDC': { 'ETH': 1/1800, 'SOL': 1/120 },
+          'SOL': { 'ETH': 1/15, 'USDC': 120 }
+        };
         
         // Calculate output amount
         const inputAmount = parseFloat(amount);
+        const rate = mockExchangeRates[sourceSymbol]?.[destSymbol] || 1;
+        
+        // Calculate output amount - this is correct as the rate represents 
+        // how many destination tokens you get for 1 source token
         const calculatedOutput = inputAmount * rate;
         
         // Apply a small fee (0.3%)
@@ -238,7 +257,7 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
         isLoading: false
       }));
     }
-  }, [swapState.sourceToken, swapState.destinationToken]);
+  }, [swapState.sourceToken, swapState.destinationToken, swapState.sourceAmount]);
 
   // Handle swap button click
   const handleSwap = async () => {
@@ -446,25 +465,19 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
             </span>
           </div>
           
-          {swapState.route && swapState.route.steps && (
+          {swapState.route && swapState.route.steps && swapState.route.steps.length > 0 && (
             <div className="mt-2">
-              <span className="text-sm text-gray-400 block mb-1">Route</span>
-              <div className="flex items-center flex-wrap">
-                {swapState.route.steps.map((step: any, index: number) => (
+              <span className="text-sm text-gray-400">Route:</span>
+              <div className="flex flex-wrap items-center mt-1">
+                {swapState.route.steps.map((step, index) => (
                   <React.Fragment key={index}>
-                    <span className="text-xs bg-primary-light text-white px-2 py-1 rounded">
+                    <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded">
                       {step.fromToken}
-                      {step.fromChain && ` (${step.fromChain})`}
                     </span>
-                    
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mx-1 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                    
-                    {index === swapState.route.steps.length - 1 && (
-                      <span className="text-xs bg-secondary-light text-white px-2 py-1 rounded">
+                    <span className="mx-1 text-gray-500 text-xs">→</span>
+                    {index === swapState.route!.steps.length - 1 && (
+                      <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded">
                         {step.toToken}
-                        {step.toChain && ` (${step.toChain})`}
                       </span>
                     )}
                   </React.Fragment>
