@@ -324,7 +324,7 @@ const TokenSelector: React.FC<Props> = ({
                       <span>{token.name}</span>
                       <span className="mx-1">•</span>
                       <span>{token.chainName}</span>
-                      {token.jupiterVolume && token.jupiterVolume > 0 && (
+                      {token.jupiterVolume && typeof token.jupiterVolume === 'number' && token.jupiterVolume > 0 && (
                         <>
                           <span className="mx-1">•</span>
                           <span>${(token.jupiterVolume / 1000000).toFixed(2)}M vol</span>
@@ -334,7 +334,11 @@ const TokenSelector: React.FC<Props> = ({
                   </div>
                   {token.price !== undefined && token.price !== null && (
                     <div className="text-right">
-                      <div className="text-white">${token.price < 0.01 ? token.price.toExponential(2) : token.price.toFixed(2)}</div>
+                      <div className="text-white">
+                        ${typeof token.price === 'number' ? 
+                          (token.price < 0.01 ? token.price.toExponential(2) : token.price.toFixed(2)) : 
+                          '0.00'}
+                      </div>
                     </div>
                   )}
                 </button>
