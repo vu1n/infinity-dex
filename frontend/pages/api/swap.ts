@@ -1,95 +1,217 @@
-import { NextApiRequest, NextApiResponse } from 'next';
+import type { NextApiRequest, NextApiResponse } from 'next';
+import axios from 'axios';
 
+// Define the response type
+type SwapResponse = {
+  success: boolean;
+  data?: any;
+  error?: string;
+};
+
+// Define the swap request type
 type SwapRequest = {
-  sourceToken: string;
   sourceChain: string;
-  destinationToken: string;
   destinationChain: string;
+  sourceToken: string;
+  destinationToken: string;
   amount: string;
-  sourceAddress: string;
-  destinationAddress: string;
-  slippage: number;
+  slippage: string;
+  walletAddress: string;
+  signature?: string;
 };
 
-// Mock transaction for simulating responses
-const generateMockTransaction = (request: SwapRequest) => {
-  const requestId = `tx-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-  const sourceTxHash = `0x${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`;
-  
-  return {
-    requestId,
-    sourceTransaction: {
-      hash: sourceTxHash,
-      status: 'completed',
-      blockNumber: Math.floor(Math.random() * 1000000) + 15000000,
-    },
-    estimatedOutput: calculateEstimatedOutput(request),
-    fee: {
-      gas: (parseFloat(request.amount) * 0.001).toFixed(6),
-      protocol: (parseFloat(request.amount) * 0.003).toFixed(6),
-      bridge: request.sourceChain !== request.destinationChain 
-        ? (parseFloat(request.amount) * 0.002).toFixed(6)
-        : '0',
-      total: (
-        parseFloat(request.amount) * 0.001 + 
-        parseFloat(request.amount) * 0.003 + 
-        (request.sourceChain !== request.destinationChain ? parseFloat(request.amount) * 0.002 : 0)
-      ).toFixed(6),
-    },
-    estimatedTime: request.sourceChain !== request.destinationChain ? 15 : 5,
-  };
+// Define the route step type
+export type RouteStep = {
+  type: 'wrap' | 'unwrap' | 'swap';
+  fromToken: string;
+  toToken: string;
+  fromChain?: string;
+  toChain?: string;
 };
 
-// Simulate exchange rate calculations
-const calculateEstimatedOutput = (request: SwapRequest) => {
-  const amount = parseFloat(request.amount);
-  
-  if (isNaN(amount)) {
-    return '0';
-  }
-  
-  let rate = 1;
-  
-  // Mock rates for demo purposes
-  if (request.sourceToken === 'ETH' && request.destinationToken === 'USDC') {
-    rate = 2000; // 1 ETH = 2000 USDC
-  } else if (request.sourceToken === 'USDC' && request.destinationToken === 'ETH') {
-    rate = 0.0005; // 1 USDC = 0.0005 ETH
-  } else if (request.sourceToken === 'MATIC' && request.destinationToken === 'USDC') {
-    rate = 0.5; // 1 MATIC = 0.5 USDC
-  } else if (request.sourceToken === 'AVAX' && request.destinationToken === 'USDC') {
-    rate = 10; // 1 AVAX = 10 USDC
-  }
-  
-  const output = amount * rate;
-  
-  // Apply fees
-  const fee = output * 0.003;
-  const netOutput = output - fee;
-  
-  return netOutput.toFixed(6);
+// Define the swap route type
+export type SwapRoute = {
+  steps: RouteStep[];
+  exchangeRate: string;
+  estimatedGas: string;
+  estimatedTime: string;
 };
 
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
+// Get the backend service URL from environment variables
+const SWAP_SERVICE_URL = process.env.SWAP_SERVICE_URL || 'http://localhost:8080';
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse<SwapResponse>
+) {
+  // Only allow POST requests
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ success: false, error: 'Method not allowed' });
   }
 
   try {
-    const swapRequest = req.body as SwapRequest;
-    
-    // Validate request
-    if (!swapRequest.sourceToken || !swapRequest.destinationToken || !swapRequest.amount) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    const {
+      sourceChain,
+      destinationChain,
+      sourceToken,
+      destinationToken,
+      amount,
+      slippage,
+      walletAddress,
+      signature
+    } = req.body as SwapRequest;
+
+    // Validate required fields
+    if (!sourceChain || !destinationChain || !sourceToken || !destinationToken || !amount || !walletAddress) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields'
+      });
     }
-    
-    // Simulate processing delay
-    setTimeout(() => {
-      const result = generateMockTransaction(swapRequest);
-      res.status(200).json(result);
-    }, 1000);
+
+    // For testnet implementation, we'll mock the swap process
+    if (process.env.NODE_ENV === 'development' || process.env.USE_MOCK_SWAP === 'true') {
+      console.log('Using mock swap implementation for testnet');
+      
+      // Create a mock swap route
+      const isCrossChain = sourceChain !== destinationChain;
+      const mockRoute: SwapRoute = {
+        steps: [],
+        exchangeRate: '0',
+        estimatedGas: isCrossChain ? '0.005' : '0.002',
+        estimatedTime: isCrossChain ? '30-60' : '10-30'
+      };
+
+      // Add steps based on whether it's cross-chain or not
+      if (isCrossChain) {
+        // For cross-chain swaps, we need to wrap, swap, and unwrap
+        if (sourceToken !== `u${sourceToken}`) {
+          mockRoute.steps.push({
+            type: 'wrap',
+            fromToken: sourceToken,
+            toToken: `u${sourceToken}`,
+            fromChain: sourceChain,
+            toChain: sourceChain
+          });
+        }
+
+        mockRoute.steps.push({
+          type: 'swap',
+          fromToken: `u${sourceToken}`,
+          toToken: `u${destinationToken}`,
+          fromChain: sourceChain,
+          toChain: destinationChain
+        });
+
+        if (destinationToken !== `u${destinationToken}`) {
+          mockRoute.steps.push({
+            type: 'unwrap',
+            fromToken: `u${destinationToken}`,
+            toToken: destinationToken,
+            fromChain: destinationChain,
+            toChain: destinationChain
+          });
+        }
+      } else {
+        // For same-chain swaps, we just need a single swap step
+        mockRoute.steps.push({
+          type: 'swap',
+          fromToken: sourceToken,
+          toToken: destinationToken,
+          fromChain: sourceChain,
+          toChain: destinationChain
+        });
+      }
+
+      // Mock transaction hash
+      const mockTxHash = `0x${Array.from({ length: 64 }, () => 
+        Math.floor(Math.random() * 16).toString(16)).join('')}`;
+
+      // Return mock response
+      return res.status(200).json({
+        success: true,
+        data: {
+          route: mockRoute,
+          transactionHash: mockTxHash,
+          status: 'pending'
+        }
+      });
+    }
+
+    // For production, connect to the actual swap service
+    const response = await axios.post(`${SWAP_SERVICE_URL}/api/v1/swap`, {
+      sourceChain,
+      destinationChain,
+      sourceToken,
+      destinationToken,
+      amount,
+      slippage: slippage || '0.5',
+      walletAddress,
+      signature
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: response.data
+    });
   } catch (error) {
-    console.error('API error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Error processing swap:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'An unknown error occurred'
+    });
+  }
+}
+
+// Helper function to execute a swap transaction
+export async function executeSwap(
+  sourceChain: string,
+  destinationChain: string,
+  sourceToken: string,
+  destinationToken: string,
+  amount: string,
+  walletAddress: string,
+  signature?: string
+): Promise<any> {
+  try {
+    const response = await axios.post('/api/swap', {
+      sourceChain,
+      destinationChain,
+      sourceToken,
+      destinationToken,
+      amount,
+      slippage: '0.5', // Default slippage
+      walletAddress,
+      signature
+    });
+
+    return response.data;
+  } catch (error) {
+    console.error('Error executing swap:', error);
+    throw error;
+  }
+}
+
+// Helper function to get a swap quote
+export async function getSwapQuote(
+  sourceChain: string,
+  destinationChain: string,
+  sourceToken: string,
+  destinationToken: string,
+  amount: string
+): Promise<any> {
+  try {
+    const response = await axios.post('/api/quote', {
+      sourceChain,
+      destinationChain,
+      sourceToken,
+      destinationToken,
+      amount
+    });
+
+    return response.data;
+  } catch (error) {
+    console.error('Error getting swap quote:', error);
+    throw error;
   }
 } 
