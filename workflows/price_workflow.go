@@ -174,7 +174,7 @@ func ScheduledPriceUpdateWorkflow(ctx workflow.Context) error {
 			WorkflowID:         "price-oracle-" + request.RequestID,
 			WorkflowRunTimeout: 2 * time.Minute,
 			// To use cron scheduling, uncomment and add this to the parent workflow options:
-			// CronSchedule: "*/15 * * * *",
+			// CronSchedule: "*/15 * * * * *", // Every 15 seconds (note the extra * for seconds)
 		})
 
 		var result types.PriceFetchResult
@@ -188,8 +188,8 @@ func ScheduledPriceUpdateWorkflow(ctx workflow.Context) error {
 				"failedSources", result.FailedSources)
 		}
 
-		// Sleep for 15 minutes before the next run
-		sleepDuration := 15 * time.Minute
+		// Sleep for 15 seconds before the next run
+		sleepDuration := 15 * time.Second // Changed from 15 * time.Minute
 		logger.Info("Sleeping until next scheduled run", "duration", sleepDuration)
 
 		if err := workflow.Sleep(ctx, sleepDuration); err != nil {

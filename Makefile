@@ -1,10 +1,16 @@
-.PHONY: build test clean run run-worker run-server lint fmt run-frontend
+.PHONY: build test clean run run-worker run-server lint fmt run-frontend run-price-worker build-price-worker
 
 # Build both worker and server binaries
 build:
 	@echo "Building Infinity DEX binaries..."
 	go build -o bin/worker cmd/worker/main.go
 	go build -o bin/server cmd/server/main.go
+	@echo "Done."
+
+# Build the price worker binary
+build-price-worker:
+	@echo "Building Price Oracle Worker binary..."
+	go build -o bin/price-worker cmd/price_worker/main.go
 	@echo "Done."
 
 # Run all tests with coverage
@@ -45,6 +51,11 @@ run-worker:
 	@echo "Starting Temporal worker..."
 	go run cmd/worker/main.go
 
+# Run the Price Oracle worker
+run-price-worker:
+	@echo "Starting Price Oracle worker..."
+	go run cmd/price_worker/main.go
+
 # Run the API server
 run-server:
 	@echo "Starting API server..."
@@ -77,12 +88,14 @@ start-temporal:
 help:
 	@echo "Available commands:"
 	@echo "  make build         - Build worker and server binaries"
+	@echo "  make build-price-worker - Build price worker binary"
 	@echo "  make test          - Run all tests with coverage"
 	@echo "  make test-unit     - Run unit tests only"
 	@echo "  make clean         - Clean up artifacts"
 	@echo "  make lint          - Run linter"
 	@echo "  make fmt           - Format code"
 	@echo "  make run-worker    - Run the Temporal worker"
+	@echo "  make run-price-worker - Run the Price Oracle worker"
 	@echo "  make run-server    - Run the API server"
 	@echo "  make run-frontend  - Run the frontend development server"
 	@echo "  make init-dev      - Initialize development environment"
