@@ -663,7 +663,7 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
   };
 
   // Route Display Component
-  const RouteDisplay: React.FC<{ route: Route }> = ({ route }) => {
+  const RouteDisplay = ({ route }: { route: Route }) => {
     if (!route || !route.steps || route.steps.length === 0) {
       return null;
     }
@@ -862,6 +862,61 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
           />
         </div>
       </div>
+      
+      {/* Exchange rate and route information */}
+      {swapState.exchangeRate !== '0' && swapState.sourceToken && swapState.destinationToken && (
+        <div className="mb-6 p-3 bg-background rounded-xl">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm text-gray-400">Exchange Rate</span>
+            <span className="text-sm font-medium text-white">
+              1 {swapState.sourceToken.symbol} ≈ {parseFloat(swapState.exchangeRate).toFixed(6)} {swapState.destinationToken.symbol}
+            </span>
+          </div>
+          
+          {swapState.route && swapState.route.steps && swapState.route.steps.length > 0 && (
+            <>
+              <div className="mt-2 mb-3">
+                <span className="text-sm text-gray-400">Route Summary:</span>
+                <div className="flex flex-wrap items-center mt-1">
+                  {swapState.route.steps.map((step, index) => (
+                    <React.Fragment key={index}>
+                      <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded">
+                        {step.fromToken}
+                        {step.type === 'bridge' && ` (${step.fromChain})`}
+                      </span>
+                      <span className="mx-1 text-gray-500 text-xs">
+                        {step.type === 'swap' ? '↔️' : 
+                         step.type === 'bridge' ? '🌉' : 
+                         step.type === 'wrap' ? '📦' : '📭'}
+                      </span>
+                      {index === swapState.route!.steps.length - 1 && (
+                        <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded">
+                          {step.toToken}
+                          {step.type === 'bridge' && ` (${step.toChain})`}
+                        </span>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+              
+              <RouteDisplay route={swapState.route} />
+            </>
+          )}
+          
+          {/* Display total fee if available */}
+          {swapState.route?.totalFee && (
+            <div className="mt-3 pt-3 border-t border-surface-light">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-400">Total Fee</span>
+                <span className="text-sm font-medium text-white">
+                  {swapState.route.totalFee.amount} {swapState.route.totalFee.token} (${swapState.route.totalFee.usdValue})
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       
       {/* Add the status display section here */}
       {swapState.workflowId && (
