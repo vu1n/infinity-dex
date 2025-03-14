@@ -8,10 +8,8 @@ type ConfirmSwapResponse = {
   error?: string;
 };
 
-// Import the workflowStates from swapStatus.ts
-// In a real implementation, this would be in a shared database
-// For this mock, we'll declare it here but it won't be shared with swapStatus.ts
-const workflowStates = new Map<string, any>();
+// Remove the duplicate workflowStates Map
+// const workflowStates = new Map<string, any>();
 
 export default async function handler(
   req: NextApiRequest,

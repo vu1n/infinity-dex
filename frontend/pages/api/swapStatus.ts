@@ -102,10 +102,14 @@ export default async function handler(
           }
         });
       } else {
-        // Still in progress
-        return res.status(404).json({
-          success: false,
-          error: 'Swap result not found or workflow still in progress'
+        // Still in progress (pending)
+        return res.status(200).json({
+          success: true,
+          data: {
+            requestID: requestId,
+            status: 'pending',
+            message: 'Swap is being processed'
+          }
         });
       }
     }
@@ -119,9 +123,12 @@ export default async function handler(
         data: result
       });
     } else {
-      return res.status(404).json({
-        success: false,
-        error: 'Swap result not found or workflow still in progress'
+      return res.status(200).json({
+        success: true,
+        data: {
+          status: 'pending',
+          message: 'Swap is being processed'
+        }
       });
     }
   } catch (error) {
