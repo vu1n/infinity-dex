@@ -451,17 +451,34 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
             const result = response.data.data;
             
             if (result) {
-              // Update the state with the result
-              setSwapState(prev => ({
-                ...prev,
-                destinationAmount: result.outputAmount,
-                exchangeRate: result.exchangeRate ? result.exchangeRate.toString() : prev.exchangeRate,
-                transactionStatus: result.success ? 'completed' : 'failed',
-                error: result.errorMessage || null
-              }));
-              
-              // Clear the interval if we have a result
-              clearInterval(interval);
+              // Check if we have a quote or a final result
+              if (result.status === 'quoted' && result.quote) {
+                // Update with quote information
+                setSwapState(prev => ({
+                  ...prev,
+                  destinationAmount: result.quote.outputAmount,
+                  exchangeRate: result.quote.exchangeRate ? result.quote.exchangeRate.toString() : prev.exchangeRate,
+                  transactionStatus: 'quoted',
+                  quote: {
+                    estimatedDestinationAmount: result.quote.outputAmount,
+                    fee: result.quote.fee ? `${result.quote.fee.totalFeeUSD.toFixed(2)} USD` : '0.1%'
+                  }
+                }));
+              } else if (result.success !== undefined) {
+                // We have a final result
+                setSwapState(prev => ({
+                  ...prev,
+                  destinationAmount: result.outputAmount,
+                  exchangeRate: result.exchangeRate ? result.exchangeRate.toString() : prev.exchangeRate,
+                  transactionStatus: result.success ? 'completed' : 'failed',
+                  error: result.errorMessage || null,
+                  // Store transaction hash if available
+                  transactionHash: result.sourceTx?.hash || result.destinationTx?.hash || null,
+                }));
+                
+                // Clear the interval if we have a final result
+                clearInterval(interval);
+              }
             }
           }
         } catch (error) {
@@ -539,7 +556,18 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
               setSwapState(prev => ({
                 ...prev,
                 transactionStatus: result.success ? 'completed' : 'failed',
-                error: result.errorMessage || null
+                error: result.errorMessage || null,
+                // Store the input and output amounts for display
+                sourceAmount: result.inputAmount || prev.sourceAmount,
+                destinationAmount: result.outputAmount || prev.destinationAmount,
+                // Store transaction hash if available
+                transactionHash: result.sourceTx?.hash || result.destinationTx?.hash || null,
+                // Calculate and store exchange rate if not provided
+                exchangeRate: result.exchangeRate ? 
+                  result.exchangeRate.toString() : 
+                  (result.inputAmount && result.outputAmount) ? 
+                    (parseFloat(result.outputAmount) / parseFloat(result.inputAmount)).toString() : 
+                    prev.exchangeRate
               }));
               
               // Clear the interval if we have a result
@@ -951,13 +979,38 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
             </div>
           )}
           
-          {swapState.transactionStatus === 'completed' && swapState.result && (
+          {swapState.transactionStatus === 'pending' && (
+            <div className="flex items-center space-x-2 text-sm">
+              <svg className="animate-spin h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <p>Waiting for your swap to be processed...</p>
+            </div>
+          )}
+          
+          {swapState.transactionStatus === 'completed' && (
             <div className="text-sm">
-              <p className="text-green-600 font-medium">Swap completed successfully!</p>
-              <p className="mt-1">You received: {swapState.result.destinationAmount} {swapState.destinationToken?.symbol}</p>
-              {swapState.result.txHash && (
+              <p className="text-green-600 font-medium mb-2">Swap completed successfully!</p>
+              <div className="bg-green-50 p-3 rounded-lg border border-green-200 mb-3">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-gray-600">You swapped:</span>
+                  <span className="font-medium">{swapState.sourceAmount} {swapState.sourceToken?.symbol}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">You received:</span>
+                  <span className="font-medium">{swapState.destinationAmount} {swapState.destinationToken?.symbol}</span>
+                </div>
+                <div className="mt-2 pt-2 border-t border-green-200">
+                  <div className="flex justify-between items-center text-xs text-gray-500">
+                    <span>Exchange rate:</span>
+                    <span>1 {swapState.sourceToken?.symbol} = {parseFloat(swapState.exchangeRate).toFixed(6)} {swapState.destinationToken?.symbol}</span>
+                  </div>
+                </div>
+              </div>
+              {swapState.transactionHash && (
                 <a 
-                  href={`https://explorer.solana.com/tx/${swapState.result.txHash}`} 
+                  href={getExplorerUrl(swapState.transactionHash)} 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="text-primary underline mt-2 inline-block"
