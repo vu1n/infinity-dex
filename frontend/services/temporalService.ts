@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 export interface SwapRequest {
   sourceToken: Token;
   destinationToken: Token;
-  amount: string; // Using string for big numbers, but ensure it's a plain number string without quotes
+  amount: string | number; // Can be a string or number
   sourceAddress: string;
   destinationAddress: string;
   slippage: number;
@@ -99,7 +99,7 @@ export async function startSwapWorkflow(request: SwapRequest): Promise<string> {
     
     // Convert the amount to an integer value based on token decimals
     // Go's big.Int can only handle integer values, not decimals
-    const parsedAmount = parseFloat(request.amount);
+    const parsedAmount = parseFloat(request.amount.toString());
     if (isNaN(parsedAmount)) {
       throw new Error('Invalid amount: must be a number');
     }
@@ -109,14 +109,14 @@ export async function startSwapWorkflow(request: SwapRequest): Promise<string> {
     
     // Convert to integer by multiplying by 10^decimals
     // For example, 1.5 ETH becomes 1500000000000000000 (1.5 * 10^18)
-    const amountInSmallestUnit = Math.floor(parsedAmount * Math.pow(10, decimals)).toString();
+    const amountInSmallestUnit = Math.floor(parsedAmount * Math.pow(10, decimals));
     
     console.log(`Converting ${parsedAmount} ${request.sourceToken.symbol} to ${amountInSmallestUnit} (smallest unit)`);
     
     // Create a clean copy of the request
     const cleanRequest = {
       ...request,
-      // Use the integer amount
+      // Use the integer amount as a number, not a string
       amount: amountInSmallestUnit
     };
     

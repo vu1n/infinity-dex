@@ -100,10 +100,9 @@ export default async function handler(
           });
         }
         
-        // Convert back to a clean string
-        const cleanAmount = parsedAmount.toString();
+        // Keep the amount as a number
         console.log('Original amount:', amount);
-        console.log('Clean amount:', cleanAmount);
+        console.log('Parsed amount:', parsedAmount);
         
         let workflowId: string;
         
@@ -111,13 +110,13 @@ export default async function handler(
           // Generate a unique workflow ID for mocking
           workflowId = `swap-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
           // Create initial workflow state for mocking
-          createWorkflowState(workflowId, cleanAmount);
+          createWorkflowState(workflowId, parsedAmount.toString());
         } else {
           // Use Temporal workflow with mock flag
           const temporalRequest: TemporalSwapRequest = {
             sourceToken: sourceTokenObj,
             destinationToken: destTokenObj,
-            amount: cleanAmount, // The amount conversion to smallest unit will happen in startSwapWorkflow
+            amount: parsedAmount, // Pass the amount as a number
             sourceAddress: walletAddress,
             destinationAddress: walletAddress, // Using the same address for source and destination
             slippage: parseFloat(slippage || '0.5'),
@@ -126,7 +125,7 @@ export default async function handler(
             mockExecution: true
           };
           
-          console.log('Sending Temporal request with amount:', cleanAmount);
+          console.log('Sending Temporal request with amount:', parsedAmount);
           
           // Start the Temporal workflow
           workflowId = await startSwapWorkflow(temporalRequest);
