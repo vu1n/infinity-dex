@@ -82,6 +82,7 @@ export default async function handler(
             destinationTx: { hash: `0x${generateRandomHash()}`, status: 'confirmed' },
             inputAmount: state.inputAmount,
             outputAmount: state.outputAmount,
+            exchangeRate: state.exchangeRate,
             fee: {
               gasFee: '0.001',
               protocolFee: '0.002',
@@ -98,6 +99,9 @@ export default async function handler(
           data: {
             requestID: requestId,
             success: false,
+            inputAmount: state.inputAmount,
+            outputAmount: state.outputAmount,
+            exchangeRate: state.exchangeRate,
             errorMessage: 'Swap failed due to insufficient liquidity'
           }
         });

@@ -455,7 +455,7 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
               setSwapState(prev => ({
                 ...prev,
                 destinationAmount: result.outputAmount,
-                exchangeRate: result.exchangeRate.toString(),
+                exchangeRate: result.exchangeRate ? result.exchangeRate.toString() : prev.exchangeRate,
                 transactionStatus: result.success ? 'completed' : 'failed',
                 error: result.errorMessage || null
               }));

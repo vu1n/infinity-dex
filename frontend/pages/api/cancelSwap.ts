@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { cancelSwap } from '../../services/temporalService';
-import { cancelWorkflow } from '../../services/mockWorkflowState';
+import { cancelWorkflow, getWorkflowState, createWorkflowState } from '../../services/mockWorkflowState';
 
 type CancelSwapResponse = {
   success: boolean;
@@ -32,15 +32,17 @@ export default async function handler(
     if (process.env.NODE_ENV === 'development' || process.env.USE_MOCK_SWAP === 'true') {
       console.log('Using mock cancel swap for workflow:', workflowId);
       
-      // Mark the workflow as cancelled in the shared state
-      const state = cancelWorkflow(workflowId);
-      
+      // Get or create the workflow state
+      let state = getWorkflowState(workflowId);
       if (!state) {
-        return res.status(404).json({
-          success: false,
-          error: 'Workflow not found'
-        });
+        // Create a new workflow state with a default input amount
+        console.log('Creating new workflow state for:', workflowId);
+        const inputAmount = '1';
+        state = createWorkflowState(workflowId, inputAmount);
       }
+      
+      // Mark the workflow as cancelled in the shared state
+      state = cancelWorkflow(workflowId);
       
       return res.status(200).json({
         success: true,

@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { confirmSwap } from '../../services/temporalService';
-import { confirmWorkflow } from '../../services/mockWorkflowState';
+import { confirmWorkflow, getWorkflowState, createWorkflowState } from '../../services/mockWorkflowState';
 
 type ConfirmSwapResponse = {
   success: boolean;
@@ -35,15 +35,17 @@ export default async function handler(
     if (process.env.NODE_ENV === 'development' || process.env.USE_MOCK_SWAP === 'true') {
       console.log('Using mock confirm swap for workflow:', workflowId);
       
-      // Mark the workflow as confirmed in the shared state
-      const state = confirmWorkflow(workflowId);
-      
+      // Get or create the workflow state
+      let state = getWorkflowState(workflowId);
       if (!state) {
-        return res.status(404).json({
-          success: false,
-          error: 'Workflow not found'
-        });
+        // Create a new workflow state with a default input amount
+        console.log('Creating new workflow state for:', workflowId);
+        const inputAmount = '1';
+        state = createWorkflowState(workflowId, inputAmount);
       }
+      
+      // Mark the workflow as confirmed in the shared state
+      state = confirmWorkflow(workflowId);
       
       return res.status(200).json({
         success: true,
