@@ -1,4 +1,4 @@
-package main
+package price_worker
 
 import (
 	"context"
@@ -120,6 +120,7 @@ func RunPriceWorker() {
 	log.Println("Shutting down worker...")
 }
 
-func main() {
+// Main function to be called from other packages
+func Main() {
 	RunPriceWorker()
 }

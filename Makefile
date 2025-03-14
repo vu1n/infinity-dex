@@ -5,7 +5,7 @@ build:
 	@echo "Building Infinity DEX binaries..."
 	go build -o bin/worker temporal/workers/swap_worker.go
 	go build -o bin/server cmd/server/main.go
-	go build -o bin/price-worker temporal/workers/price_worker.go
+	go build -o bin/price-worker temporal/workers/price_worker_cmd/main.go
 	@echo "Done."
 
 # Run tests with coverage
@@ -36,19 +36,14 @@ fmt:
 	@echo "Done."
 
 # Run the Temporal worker
-run-worker:
+run-swap-worker:
 	@echo "Starting Temporal worker..."
 	go run temporal/workers/swap_worker.go
 
 # Run the Price Oracle worker
 run-price-worker:
 	@echo "Starting Price Oracle worker..."
-	go run temporal/workers/price_worker.go
-
-# Run the API server
-run-server:
-	@echo "Starting API server..."
-	go run cmd/server/main.go
+	go run temporal/workers/price_worker_cmd/main.go
 
 # Run the frontend development server
 run-frontend:
@@ -86,7 +81,7 @@ help:
 	@echo "  make clean         - Clean up artifacts"
 	@echo "  make lint          - Run linter"
 	@echo "  make fmt           - Format code"
-	@echo "  make run-worker    - Run the Temporal worker"
+	@echo "  make run-swap-worker    - Run the Swap worker"
 	@echo "  make run-price-worker - Run the Price Oracle worker"
 	@echo "  make run-server    - Run the API server"
 	@echo "  make run-frontend  - Run the frontend development server"
