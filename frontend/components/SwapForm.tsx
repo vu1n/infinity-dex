@@ -972,6 +972,22 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
             <div className="text-sm">
               <p className="text-red-600 font-medium">Swap failed</p>
               <p className="mt-1">{swapState.error || 'An error occurred during the swap process.'}</p>
+              <button 
+                onClick={() => {
+                  // Reset workflow state and try again with the same parameters
+                  setSwapState(prev => ({
+                    ...prev,
+                    workflowId: null,
+                    transactionStatus: null,
+                    error: null
+                  }));
+                  // Slight delay to ensure state is updated before retrying
+                  setTimeout(() => handleSwap(), 100);
+                }}
+                className="mt-3 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/80 transition-colors"
+              >
+                Retry Swap
+              </button>
             </div>
           )}
           
@@ -1018,38 +1034,57 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
         </button>
       ) : (
         <div className="flex space-x-4">
-          <button
-            onClick={confirmSwap}
-            disabled={swapState.isLoading || swapState.transactionStatus === 'completed' || swapState.transactionStatus === 'failed'}
-            className={`w-1/2 py-3 px-4 rounded-xl font-medium ${
-              !swapState.isLoading && swapState.transactionStatus !== 'completed' && swapState.transactionStatus !== 'failed'
-                ? 'bg-secondary text-white'
-                : 'bg-surface-light text-gray-400 cursor-not-allowed'
-            } transition-colors`}
-          >
-            {swapState.isLoading ? (
-              <span className="flex items-center justify-center">
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Processing...
-              </span>
-            ) : (
-              'Confirm Swap'
-            )}
-          </button>
-          <button
-            onClick={cancelSwap}
-            disabled={swapState.isLoading || swapState.transactionStatus === 'completed' || swapState.transactionStatus === 'failed'}
-            className={`w-1/2 py-3 px-4 rounded-xl font-medium ${
-              !swapState.isLoading && swapState.transactionStatus !== 'completed' && swapState.transactionStatus !== 'failed'
-                ? 'bg-red-600 text-white'
-                : 'bg-surface-light text-gray-400 cursor-not-allowed'
-            } transition-colors`}
-          >
-            Cancel
-          </button>
+          {(swapState.transactionStatus as string) === 'completed' || (swapState.transactionStatus as string) === 'failed' ? (
+            <button
+              onClick={() => {
+                // Reset the state to start a new swap
+                setSwapState(prev => ({
+                  ...prev,
+                  workflowId: null,
+                  transactionStatus: null,
+                  error: null
+                }));
+              }}
+              className="w-full py-3 px-4 rounded-xl font-medium bg-primary text-white transition-colors"
+            >
+              New Swap
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={confirmSwap}
+                disabled={swapState.isLoading || (swapState.transactionStatus as string) === 'completed' || (swapState.transactionStatus as string) === 'failed'}
+                className={`w-1/2 py-3 px-4 rounded-xl font-medium ${
+                  !swapState.isLoading && (swapState.transactionStatus as string) !== 'completed' && (swapState.transactionStatus as string) !== 'failed'
+                    ? 'bg-secondary text-white'
+                    : 'bg-surface-light text-gray-400 cursor-not-allowed'
+                } transition-colors`}
+              >
+                {swapState.isLoading ? (
+                  <span className="flex items-center justify-center">
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Processing...
+                  </span>
+                ) : (
+                  'Confirm Swap'
+                )}
+              </button>
+              <button
+                onClick={cancelSwap}
+                disabled={swapState.isLoading || (swapState.transactionStatus as string) === 'completed' || (swapState.transactionStatus as string) === 'failed'}
+                className={`w-1/2 py-3 px-4 rounded-xl font-medium ${
+                  !swapState.isLoading && (swapState.transactionStatus as string) !== 'completed' && (swapState.transactionStatus as string) !== 'failed'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-surface-light text-gray-400 cursor-not-allowed'
+                } transition-colors`}
+              >
+                Cancel
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
