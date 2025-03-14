@@ -1,9 +1,8 @@
-.PHONY: build test clean run run-worker run-server lint fmt run-frontend init-db
+.PHONY: build test clean run run-price-worker run-server lint fmt run-frontend init-db
 
 # Build server and worker binaries
 build:
 	@echo "Building Infinity DEX binaries..."
-	go build -o bin/worker temporal/workers/swap/worker.go
 	go build -o bin/server cmd/server/main.go
 	go build -o bin/price-worker temporal/workers/price/worker.go
 	@echo "Done."
@@ -35,15 +34,15 @@ fmt:
 	go fmt ./...
 	@echo "Done."
 
-# Run the Temporal worker
-run-swap-worker:
-	@echo "Starting Temporal worker..."
-	go run temporal/workers/swap/worker.go
-
 # Run the Price Oracle worker
 run-price-worker:
 	@echo "Starting Price Oracle worker..."
 	go run temporal/workers/price/worker.go
+
+# Run the API server
+run-server:
+	@echo "Starting API server..."
+	go run cmd/server/main.go
 
 # Run the frontend development server
 run-frontend:
@@ -81,7 +80,6 @@ help:
 	@echo "  make clean         - Clean up artifacts"
 	@echo "  make lint          - Run linter"
 	@echo "  make fmt           - Format code"
-	@echo "  make run-swap-worker    - Run the Swap worker"
 	@echo "  make run-price-worker - Run the Price Oracle worker"
 	@echo "  make run-server    - Run the API server"
 	@echo "  make run-frontend  - Run the frontend development server"
