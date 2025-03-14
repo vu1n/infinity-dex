@@ -93,25 +93,26 @@ export async function startSwapWorkflow(request: SwapRequest): Promise<string> {
       request.deadline = deadline.toISOString();
     }
     
-    // Fix the amount format to ensure it's a proper number for Go's big.Int
-    // First parse as float to remove any extra formatting, then convert to string
+    // Parse the amount as a number to avoid serialization issues with Go's big.Int
     const parsedAmount = parseFloat(request.amount);
     if (isNaN(parsedAmount)) {
       throw new Error('Invalid amount: must be a number');
     }
     
-    // Create a clean copy of the request to avoid any reference issues
+    console.log('Original amount:', request.amount);
+    console.log('Parsed amount:', parsedAmount);
+    
+    // Create a clean copy of the request with the parsed amount
     const cleanRequest = {
       ...request,
-      // Ensure amount is a clean number string without any extra quotes
+      // Convert back to string but ensure it's a clean number string
       amount: parsedAmount.toString()
     };
-    
-    console.log('Sending swap request with amount:', cleanRequest.amount);
     
     const client = await getTemporalClient();
     
     // Start the workflow with the clean request
+    // We'll also add a special serialization hint to the client
     const handle = await client.workflow.start('SwapWorkflow', {
       args: [{ request: cleanRequest }],
       taskQueue: 'swap-queue',

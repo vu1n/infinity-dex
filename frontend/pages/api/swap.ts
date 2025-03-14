@@ -88,12 +88,23 @@ export default async function handler(
         }
         
         // Parse the amount as a number to avoid double-quoting issues
-        const parsedAmount = parseFloat(amount).toString();
+        const parsedAmount = parseFloat(amount);
+        if (isNaN(parsedAmount)) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid amount: must be a number'
+          });
+        }
+        
+        // Convert back to a clean string
+        const cleanAmount = parsedAmount.toString();
+        console.log('Original amount:', amount);
+        console.log('Clean amount:', cleanAmount);
         
         const temporalRequest: TemporalSwapRequest = {
           sourceToken: sourceTokenObj,
           destinationToken: destTokenObj,
-          amount: parsedAmount, // Use the parsed amount
+          amount: cleanAmount, // Use the clean amount string
           sourceAddress: walletAddress,
           destinationAddress: walletAddress, // Using the same address for source and destination
           slippage: parseFloat(slippage || '0.5'),
