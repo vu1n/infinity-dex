@@ -3,6 +3,7 @@ import TokenSelector from './TokenSelector';
 import { executeSwap } from '../pages/api/swap';
 import { ConnectWalletButton, useWallet } from './WalletConnect';
 import { ethers } from 'ethers';
+import axios from 'axios';
 
 // Define Token type if it doesn't exist in a separate file
 interface Token {
@@ -79,9 +80,18 @@ interface SwapState {
   exchangeRate: string;
   route: Route | null;
   transactionHash: string | null;
-  transactionStatus: 'pending' | 'completed' | 'failed' | null;
+  transactionStatus: 'pending' | 'quoting' | 'quoted' | 'processing' | 'completed' | 'failed' | null;
   availableTokens: Token[];
   isLoadingTokens: boolean;
+  workflowId: string | null;
+  quote: {
+    estimatedDestinationAmount: string;
+    fee?: string;
+  } | null;
+  result: {
+    destinationAmount: string;
+    txHash?: string;
+  } | null;
 }
 
 // Initial state for the swap form
@@ -98,7 +108,10 @@ const initialSwapState: SwapState = {
   transactionHash: null,
   transactionStatus: null,
   availableTokens: [],
-  isLoadingTokens: true
+  isLoadingTokens: true,
+  workflowId: null,
+  quote: null,
+  result: null,
 };
 
 // Define the SwapForm component
@@ -385,50 +398,207 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
         walletAddress = solanaWallet.publicKey.toString();
       }
 
-      // Prepare transaction for signing
-      let signature = '';
-      
-      if (sourceChain === 'ethereum' && ethereumWallet) {
-        // For Ethereum, sign a message to authorize the swap
-        const message = `Authorize swap of ${swapState.sourceAmount} ${swapState.sourceToken?.symbol} to ${swapState.destinationToken?.symbol}`;
-        signature = await ethereumWallet.signer.signMessage(message);
-      } else if (sourceChain === 'solana' && solanaWallet) {
-        // For Solana, we would normally sign a transaction
-        // This is simplified for the example - in a real implementation, you would use proper Solana transaction signing
-        console.log('Solana wallet signing would happen here');
-        // Mock signature for demo purposes
-        signature = `solana-mock-signature-${Date.now()}`;
-      }
-
-      // Execute the swap
-      const result = await executeSwap(
+      // Call the swap API which now uses Temporal
+      const response = await axios.post('/api/swap', {
         sourceChain,
         destinationChain,
-        swapState.sourceToken?.symbol || '',
-        swapState.destinationToken?.symbol || '',
-        swapState.sourceAmount,
-        walletAddress,
-        signature
-      );
+        sourceToken: swapState.sourceToken?.symbol,
+        destinationToken: swapState.destinationToken?.symbol,
+        amount: swapState.sourceAmount,
+        slippage: swapState.slippage,
+        walletAddress
+      });
 
-      console.log('Swap result:', result);
-
-      if (result.success) {
+      if (response.data.success) {
+        const { workflowId, route, status } = response.data.data;
+        
         setSwapState(prev => ({
           ...prev,
-          transactionHash: result.data.transactionHash,
-          transactionStatus: 'pending',
-          isLoading: false
+          isLoading: false,
+          route: route,
+          workflowId: workflowId,
+          transactionStatus: status
         }));
+
+        // Start polling for quote
+        pollForQuote(workflowId);
       } else {
-        throw new Error(result.error || 'Swap failed');
+        setSwapState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: response.data.error || 'Failed to initiate swap'
+        }));
       }
     } catch (error) {
       console.error('Error executing swap:', error);
       setSwapState(prev => ({
         ...prev,
-        error: error instanceof Error ? error.message : 'Failed to execute swap',
-        isLoading: false
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'An unknown error occurred'
+      }));
+    }
+  };
+
+  // Add a function to poll for the quote
+  const pollForQuote = async (workflowId: string) => {
+    try {
+      // Poll for the quote every 2 seconds
+      const interval = setInterval(async () => {
+        try {
+          const response = await axios.get(`/api/swapStatus?workflowId=${workflowId}`);
+          
+          if (response.data.success) {
+            const result = response.data.data;
+            
+            if (result) {
+              // Update the state with the result
+              setSwapState(prev => ({
+                ...prev,
+                destinationAmount: result.outputAmount,
+                exchangeRate: result.exchangeRate.toString(),
+                transactionStatus: result.success ? 'completed' : 'failed',
+                error: result.errorMessage || null
+              }));
+              
+              // Clear the interval if we have a result
+              clearInterval(interval);
+            }
+          }
+        } catch (error) {
+          console.error('Error polling for quote:', error);
+          // Don't clear the interval, keep trying
+        }
+      }, 2000);
+      
+      // Clear the interval after 2 minutes to avoid infinite polling
+      setTimeout(() => {
+        clearInterval(interval);
+      }, 120000);
+    } catch (error) {
+      console.error('Error setting up polling:', error);
+    }
+  };
+
+  // Add a function to confirm the swap
+  const confirmSwap = async () => {
+    if (!swapState.workflowId) {
+      setSwapState(prev => ({
+        ...prev,
+        error: 'No active swap to confirm'
+      }));
+      return;
+    }
+    
+    try {
+      setSwapState(prev => ({ ...prev, isLoading: true, error: null }));
+      
+      const response = await axios.post('/api/confirmSwap', {
+        workflowId: swapState.workflowId
+      });
+      
+      if (response.data.success) {
+        setSwapState(prev => ({
+          ...prev,
+          isLoading: false,
+          transactionStatus: 'pending',
+          error: null
+        }));
+        
+        // Start polling for the result
+        pollForResult(swapState.workflowId);
+      } else {
+        setSwapState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: response.data.error || 'Failed to confirm swap'
+        }));
+      }
+    } catch (error) {
+      console.error('Error confirming swap:', error);
+      setSwapState(prev => ({
+        ...prev,
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'An unknown error occurred'
+      }));
+    }
+  };
+
+  // Add a function to poll for the result
+  const pollForResult = async (workflowId: string) => {
+    try {
+      // Poll for the result every 3 seconds
+      const interval = setInterval(async () => {
+        try {
+          const response = await axios.get(`/api/swapStatus?workflowId=${workflowId}`);
+          
+          if (response.data.success) {
+            const result = response.data.data;
+            
+            if (result && (result.success || result.errorMessage)) {
+              // Update the state with the result
+              setSwapState(prev => ({
+                ...prev,
+                transactionStatus: result.success ? 'completed' : 'failed',
+                error: result.errorMessage || null
+              }));
+              
+              // Clear the interval if we have a result
+              clearInterval(interval);
+            }
+          }
+        } catch (error) {
+          console.error('Error polling for result:', error);
+          // Don't clear the interval, keep trying
+        }
+      }, 3000);
+      
+      // Clear the interval after 5 minutes to avoid infinite polling
+      setTimeout(() => {
+        clearInterval(interval);
+      }, 300000);
+    } catch (error) {
+      console.error('Error setting up polling:', error);
+    }
+  };
+
+  // Add a function to cancel the swap
+  const cancelSwap = async () => {
+    if (!swapState.workflowId) {
+      setSwapState(prev => ({
+        ...prev,
+        error: 'No active swap to cancel'
+      }));
+      return;
+    }
+    
+    try {
+      setSwapState(prev => ({ ...prev, isLoading: true, error: null }));
+      
+      const response = await axios.post('/api/cancelSwap', {
+        workflowId: swapState.workflowId
+      });
+      
+      if (response.data.success) {
+        setSwapState(prev => ({
+          ...prev,
+          isLoading: false,
+          transactionStatus: 'failed',
+          error: 'Swap cancelled by user',
+          workflowId: null
+        }));
+      } else {
+        setSwapState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: response.data.error || 'Failed to cancel swap'
+        }));
+      }
+    } catch (error) {
+      console.error('Error cancelling swap:', error);
+      setSwapState(prev => ({
+        ...prev,
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'An unknown error occurred'
       }));
     }
   };
@@ -693,136 +863,142 @@ const SwapForm: React.FC<SwapFormProps> = ({ className }) => {
         </div>
       </div>
       
-      {/* Exchange rate and route information */}
-      {swapState.exchangeRate !== '0' && swapState.sourceToken && swapState.destinationToken && (
-        <div className="mb-6 p-3 bg-background rounded-xl">
+      {/* Add the status display section here */}
+      {swapState.workflowId && (
+        <div className="mb-4 p-4 rounded-lg bg-surface-light">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-gray-400">Exchange Rate</span>
-            <span className="text-sm font-medium text-white">
-              1 {swapState.sourceToken.symbol} ≈ {parseFloat(swapState.exchangeRate).toFixed(6)} {swapState.destinationToken.symbol}
-            </span>
+            <h3 className="font-medium">Swap Status</h3>
+            <div className={`px-2 py-1 rounded-md text-xs font-medium ${
+              swapState.transactionStatus === 'completed' ? 'bg-green-100 text-green-800' :
+              swapState.transactionStatus === 'failed' ? 'bg-red-100 text-red-800' :
+              swapState.transactionStatus === 'quoting' ? 'bg-blue-100 text-blue-800' :
+              'bg-yellow-100 text-yellow-800'
+            }`}>
+              {swapState.transactionStatus === 'completed' ? 'Completed' :
+               swapState.transactionStatus === 'failed' ? 'Failed' :
+               swapState.transactionStatus === 'quoting' ? 'Getting Quote' :
+               swapState.transactionStatus === 'quoted' ? 'Ready to Confirm' :
+               swapState.transactionStatus === 'processing' ? 'Processing' :
+               'Pending'}
+            </div>
           </div>
           
-          {swapState.route && swapState.route.steps && swapState.route.steps.length > 0 && (
-            <>
-              <div className="mt-2 mb-3">
-                <span className="text-sm text-gray-400">Route Summary:</span>
-                <div className="flex flex-wrap items-center mt-1">
-                  {swapState.route.steps.map((step, index) => (
-                    <React.Fragment key={index}>
-                      <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded">
-                        {step.fromToken}
-                        {step.type === 'bridge' && ` (${step.fromChain})`}
-                      </span>
-                      <span className="mx-1 text-gray-500 text-xs">
-                        {step.type === 'swap' ? '↔️' : 
-                         step.type === 'bridge' ? '🌉' : 
-                         step.type === 'wrap' ? '📦' : '📭'}
-                      </span>
-                      {index === swapState.route!.steps.length - 1 && (
-                        <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded">
-                          {step.toToken}
-                          {step.type === 'bridge' && ` (${step.toChain})`}
-                        </span>
-                      )}
-                    </React.Fragment>
-                  ))}
-                </div>
-              </div>
-              
-              <RouteDisplay route={swapState.route} />
-            </>
+          {swapState.transactionStatus === 'quoted' && swapState.quote && (
+            <div className="text-sm">
+              <p className="mb-1">You will receive approximately:</p>
+              <p className="font-medium text-lg">{swapState.quote.estimatedDestinationAmount} {swapState.destinationToken?.symbol}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Rate: 1 {swapState.sourceToken?.symbol} ≈ {
+                  (parseFloat(swapState.quote.estimatedDestinationAmount) / parseFloat(swapState.sourceAmount)).toFixed(6)
+                } {swapState.destinationToken?.symbol}
+              </p>
+              <p className="text-xs text-gray-500">Fee: {swapState.quote.fee || '0.1%'}</p>
+            </div>
           )}
           
-          {/* Display total fee if available */}
-          {swapState.route?.totalFee && (
-            <div className="mt-3 pt-3 border-t border-surface-light">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">Total Fee</span>
-                <span className="text-sm font-medium text-white">
-                  {swapState.route.totalFee.amount} {swapState.route.totalFee.token} (${swapState.route.totalFee.usdValue})
-                </span>
-              </div>
+          {swapState.transactionStatus === 'completed' && swapState.result && (
+            <div className="text-sm">
+              <p className="text-green-600 font-medium">Swap completed successfully!</p>
+              <p className="mt-1">You received: {swapState.result.destinationAmount} {swapState.destinationToken?.symbol}</p>
+              {swapState.result.txHash && (
+                <a 
+                  href={`https://explorer.solana.com/tx/${swapState.result.txHash}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-primary underline mt-2 inline-block"
+                >
+                  View transaction
+                </a>
+              )}
+            </div>
+          )}
+          
+          {swapState.transactionStatus === 'failed' && (
+            <div className="text-sm">
+              <p className="text-red-600 font-medium">Swap failed</p>
+              <p className="mt-1">{swapState.error || 'An error occurred during the swap process.'}</p>
+            </div>
+          )}
+          
+          {(swapState.transactionStatus === 'quoting' || swapState.transactionStatus === 'processing') && (
+            <div className="flex items-center space-x-2 text-sm">
+              <svg className="animate-spin h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <p>{swapState.transactionStatus === 'quoting' ? 'Getting the best quote for you...' : 'Processing your swap...'}</p>
             </div>
           )}
         </div>
       )}
       
-      {/* Loading tokens message */}
-      {swapState.isLoadingTokens && (
-        <div className="mb-6 p-3 bg-background rounded-xl">
-          <div className="flex items-center justify-center">
-            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <span className="text-sm text-gray-400">Loading tokens...</span>
-          </div>
-        </div>
-      )}
-      
-      {/* Error message */}
-      {swapState.error && (
-        <div className="mb-6 p-3 bg-red-900/20 text-red-400 rounded-xl">
-          {swapState.error}
-        </div>
-      )}
-      
-      {/* Transaction status */}
-      {swapState.transactionHash && (
-        <div className="mb-6 p-3 bg-primary/20 rounded-xl">
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-primary-light">Transaction</span>
-            <span className={`text-sm font-medium ${
-              swapState.transactionStatus === 'completed' ? 'text-secondary-light' : 
-              swapState.transactionStatus === 'failed' ? 'text-red-400' : 'text-accent'
-            }`}>
-              {swapState.transactionStatus ? 
-                swapState.transactionStatus.charAt(0).toUpperCase() + swapState.transactionStatus.slice(1) 
-                : 'Pending'}
+      {/* Swap button section */}
+      {!swapState.workflowId ? (
+        <button
+          onClick={handleSwap}
+          disabled={!isReadyToSwap || swapState.isLoading}
+          className={`w-full py-3 px-4 rounded-xl font-medium ${
+            isReadyToSwap && !swapState.isLoading
+              ? 'btn-primary'
+              : 'bg-surface-light text-gray-400 cursor-not-allowed'
+          } transition-colors`}
+        >
+          {swapState.isLoading ? (
+            <span className="flex items-center justify-center">
+              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Processing...
             </span>
-          </div>
-          <a 
-            href={getExplorerUrl(swapState.transactionHash)}
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-xs text-primary-light hover:underline break-all"
+          ) : !ethereumWallet && !solanaWallet ? (
+            'Connect Wallet'
+          ) : !swapState.sourceToken || !swapState.destinationToken ? (
+            'Select Tokens'
+          ) : !swapState.sourceAmount || parseFloat(swapState.sourceAmount) <= 0 ? (
+            'Enter Amount'
+          ) : (
+            'Swap'
+          )}
+        </button>
+      ) : (
+        <div className="flex space-x-4">
+          <button
+            onClick={confirmSwap}
+            disabled={swapState.isLoading || swapState.transactionStatus === 'completed' || swapState.transactionStatus === 'failed'}
+            className={`w-1/2 py-3 px-4 rounded-xl font-medium ${
+              !swapState.isLoading && swapState.transactionStatus !== 'completed' && swapState.transactionStatus !== 'failed'
+                ? 'bg-secondary text-white'
+                : 'bg-surface-light text-gray-400 cursor-not-allowed'
+            } transition-colors`}
           >
-            {swapState.transactionHash}
-          </a>
+            {swapState.isLoading ? (
+              <span className="flex items-center justify-center">
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Processing...
+              </span>
+            ) : (
+              'Confirm Swap'
+            )}
+          </button>
+          <button
+            onClick={cancelSwap}
+            disabled={swapState.isLoading || swapState.transactionStatus === 'completed' || swapState.transactionStatus === 'failed'}
+            className={`w-1/2 py-3 px-4 rounded-xl font-medium ${
+              !swapState.isLoading && swapState.transactionStatus !== 'completed' && swapState.transactionStatus !== 'failed'
+                ? 'bg-red-600 text-white'
+                : 'bg-surface-light text-gray-400 cursor-not-allowed'
+            } transition-colors`}
+          >
+            Cancel
+          </button>
         </div>
       )}
-      
-      {/* Swap button */}
-      <button
-        onClick={handleSwap}
-        disabled={!isReadyToSwap || swapState.isLoading}
-        className={`w-full py-3 px-4 rounded-xl font-medium ${
-          isReadyToSwap && !swapState.isLoading
-            ? 'btn-primary'
-            : 'bg-surface-light text-gray-400 cursor-not-allowed'
-        } transition-colors`}
-      >
-        {swapState.isLoading ? (
-          <span className="flex items-center justify-center">
-            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Processing...
-          </span>
-        ) : !ethereumWallet && !solanaWallet ? (
-          'Connect Wallet'
-        ) : !swapState.sourceToken || !swapState.destinationToken ? (
-          'Select Tokens'
-        ) : !swapState.sourceAmount || parseFloat(swapState.sourceAmount) <= 0 ? (
-          'Enter Amount'
-        ) : (
-          'Swap'
-        )}
-      </button>
     </div>
   );
 };
 
-export default SwapForm; 
+export default SwapForm;
