@@ -20,6 +20,20 @@ The Infinity DEX architecture combines:
 3. **Universal.xyz SDK**: Integration with wrapped asset protocol
 4. **Frontend UI**: User interface for trading and liquidity provision
 
+## Directory Structure
+
+- `cmd/`: Command-line applications
+  - `server/`: API server
+- `config/`: Configuration management
+- `db/`: Database schema and migrations
+- `frontend/`: Next.js frontend application
+- `services/`: Core business logic services
+- `temporal/`: Temporal workflows, activities, and workers
+  - `activities/`: Temporal activity implementations
+  - `workflows/`: Temporal workflow definitions
+  - `workers/`: Temporal worker implementations
+- `universalsdk/`: Universal.xyz SDK integration
+
 ## Core Services
 
 Infinity DEX is built on a modular service architecture:

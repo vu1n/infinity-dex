@@ -3,9 +3,9 @@
 # Build server and worker binaries
 build:
 	@echo "Building Infinity DEX binaries..."
-	go build -o bin/worker cmd/worker/main.go
+	go build -o bin/worker temporal/workers/swap_worker.go
 	go build -o bin/server cmd/server/main.go
-	go build -o bin/price-worker cmd/price_worker/main.go
+	go build -o bin/price-worker temporal/workers/price_worker.go
 	@echo "Done."
 
 # Run tests with coverage
@@ -38,12 +38,12 @@ fmt:
 # Run the Temporal worker
 run-worker:
 	@echo "Starting Temporal worker..."
-	go run cmd/worker/main.go
+	go run temporal/workers/swap_worker.go
 
 # Run the Price Oracle worker
 run-price-worker:
 	@echo "Starting Price Oracle worker..."
-	go run cmd/price_worker/main.go
+	go run temporal/workers/price_worker.go
 
 # Run the API server
 run-server:
