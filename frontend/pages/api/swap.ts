@@ -166,7 +166,7 @@ export default async function handler(
         
         // Create initial workflow state for mocking
         if (process.env.NODE_ENV === 'development' || process.env.USE_MOCK_SWAP === 'true') {
-          createWorkflowState(workflowId, parsedAmount);
+          createWorkflowState(workflowId, cleanAmount);
         }
         
         // Return response with workflow ID
