@@ -50,10 +50,11 @@ Infinity DEX is built on a modular service architecture:
 ```
 infinity-dex/
 ├── cmd/                # Command line applications
-│   ├── worker/         # Temporal worker
 │   └── server/         # API server
-├── workflows/          # Temporal workflow definitions
-├── activities/         # Temporal activity implementations
+├── temporal/           # Temporal-related code
+│   ├── workflows/      # Temporal workflow definitions
+│   ├── activities/     # Temporal activity implementations
+│   └── workers/        # Temporal worker implementations
 ├── universalsdk/       # Integration with Universal.xyz
 ├── config/             # Configuration files
 ├── services/           # Core business logic services
