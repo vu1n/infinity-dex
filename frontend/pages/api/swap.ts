@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import axios from 'axios';
+import { startSwapWorkflow, SwapRequest as TemporalSwapRequest } from '../../services/temporalService';
 
 // Define the response type
 type SwapResponse = {
@@ -69,73 +70,101 @@ export default async function handler(
       });
     }
 
-    // For testnet implementation, we'll mock the swap process
-    if (process.env.NODE_ENV === 'development' || process.env.USE_MOCK_SWAP === 'true') {
-      console.log('Using mock swap implementation for testnet');
+    // For testnet implementation or when using Temporal
+    if (process.env.NODE_ENV === 'development' || process.env.USE_MOCK_SWAP === 'true' || process.env.USE_TEMPORAL === 'true') {
+      console.log('Using Temporal workflow for swap');
       
-      // Create a mock swap route
-      const isCrossChain = sourceChain !== destinationChain;
-      const mockRoute: SwapRoute = {
-        steps: [],
-        exchangeRate: '0',
-        estimatedGas: isCrossChain ? '0.005' : '0.002',
-        estimatedTime: isCrossChain ? '30-60' : '10-30'
-      };
-
-      // Add steps based on whether it's cross-chain or not
-      if (isCrossChain) {
-        // For cross-chain swaps, we need to wrap, swap, and unwrap
-        if (sourceToken !== `u${sourceToken}`) {
-          mockRoute.steps.push({
-            type: 'wrap',
-            fromToken: sourceToken,
-            toToken: `u${sourceToken}`,
-            fromChain: sourceChain,
-            toChain: sourceChain
+      try {
+        // Convert the API request to a Temporal swap request
+        const sourceTokenObj = await fetchTokenDetails(sourceToken, sourceChain);
+        const destTokenObj = await fetchTokenDetails(destinationToken, destinationChain);
+        
+        if (!sourceTokenObj || !destTokenObj) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid token details'
           });
         }
+        
+        const temporalRequest: TemporalSwapRequest = {
+          sourceToken: sourceTokenObj,
+          destinationToken: destTokenObj,
+          amount: amount,
+          sourceAddress: walletAddress,
+          destinationAddress: walletAddress, // Using the same address for source and destination
+          slippage: parseFloat(slippage || '0.5'),
+          deadline: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 minutes from now
+        };
+        
+        // Start the Temporal workflow
+        const workflowId = await startSwapWorkflow(temporalRequest);
+        
+        // Create a mock swap route for UI display
+        const isCrossChain = sourceChain !== destinationChain;
+        const mockRoute: SwapRoute = {
+          steps: [],
+          exchangeRate: '0',
+          estimatedGas: isCrossChain ? '0.005' : '0.002',
+          estimatedTime: isCrossChain ? '30-60' : '10-30'
+        };
 
-        mockRoute.steps.push({
-          type: 'swap',
-          fromToken: `u${sourceToken}`,
-          toToken: `u${destinationToken}`,
-          fromChain: sourceChain,
-          toChain: destinationChain
-        });
+        // Add steps based on whether it's cross-chain or not
+        if (isCrossChain) {
+          // For cross-chain swaps, we need to wrap, swap, and unwrap
+          if (sourceToken !== `u${sourceToken}`) {
+            mockRoute.steps.push({
+              type: 'wrap',
+              fromToken: sourceToken,
+              toToken: `u${sourceToken}`,
+              fromChain: sourceChain,
+              toChain: sourceChain
+            });
+          }
 
-        if (destinationToken !== `u${destinationToken}`) {
           mockRoute.steps.push({
-            type: 'unwrap',
-            fromToken: `u${destinationToken}`,
+            type: 'swap',
+            fromToken: `u${sourceToken}`,
+            toToken: `u${destinationToken}`,
+            fromChain: sourceChain,
+            toChain: destinationChain
+          });
+
+          if (destinationToken !== `u${destinationToken}`) {
+            mockRoute.steps.push({
+              type: 'unwrap',
+              fromToken: `u${destinationToken}`,
+              toToken: destinationToken,
+              fromChain: destinationChain,
+              toChain: destinationChain
+            });
+          }
+        } else {
+          // For same-chain swaps, we just need a single swap step
+          mockRoute.steps.push({
+            type: 'swap',
+            fromToken: sourceToken,
             toToken: destinationToken,
-            fromChain: destinationChain,
+            fromChain: sourceChain,
             toChain: destinationChain
           });
         }
-      } else {
-        // For same-chain swaps, we just need a single swap step
-        mockRoute.steps.push({
-          type: 'swap',
-          fromToken: sourceToken,
-          toToken: destinationToken,
-          fromChain: sourceChain,
-          toChain: destinationChain
+        
+        // Return response with workflow ID
+        return res.status(200).json({
+          success: true,
+          data: {
+            workflowId,
+            route: mockRoute,
+            status: 'pending'
+          }
+        });
+      } catch (error) {
+        console.error('Error starting Temporal workflow:', error);
+        return res.status(500).json({
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to start swap workflow'
         });
       }
-
-      // Mock transaction hash
-      const mockTxHash = `0x${Array.from({ length: 64 }, () => 
-        Math.floor(Math.random() * 16).toString(16)).join('')}`;
-
-      // Return mock response
-      return res.status(200).json({
-        success: true,
-        data: {
-          route: mockRoute,
-          transactionHash: mockTxHash,
-          status: 'pending'
-        }
-      });
     }
 
     // For production, connect to the actual swap service
@@ -160,6 +189,37 @@ export default async function handler(
       success: false,
       error: error instanceof Error ? error.message : 'An unknown error occurred'
     });
+  }
+}
+
+// Helper function to fetch token details
+async function fetchTokenDetails(symbol: string, chainName: string) {
+  try {
+    // Use the tokens directly from the request instead of making an API call
+    // This avoids the need for an internal API call from the server
+    const baseUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : process.env.NODE_ENV === 'development' 
+        ? 'http://localhost:3000' 
+        : '';
+        
+    const response = await axios.get(`${baseUrl}/api/universalTokens?includeJupiter=true`);
+    
+    if (response.data) {
+      // Find the token that matches the symbol and chain
+      const token = response.data.find((t: any) => 
+        t.symbol.toLowerCase() === symbol.toLowerCase() && 
+        t.chainName.toLowerCase() === chainName.toLowerCase()
+      );
+      
+      if (token) {
+        return token;
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error('Error fetching token details:', error);
+    return null;
   }
 }
 
