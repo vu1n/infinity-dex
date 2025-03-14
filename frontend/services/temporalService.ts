@@ -94,6 +94,12 @@ export async function startSwapWorkflow(request: SwapRequest): Promise<string> {
       request.deadline = deadline.toISOString();
     }
     
+    // Validate amount is greater than zero
+    const parsedAmount = parseFloat(request.amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      throw new Error('Invalid amount: must be a positive number greater than zero');
+    }
+    
     // Log the original amount for debugging
     console.log('Original amount:', request.amount);
     
@@ -102,8 +108,8 @@ export async function startSwapWorkflow(request: SwapRequest): Promise<string> {
     // Go's big.Int expects a plain string like "1", not a JSON string like "\"1\""
     const cleanRequest = {
       ...request,
-      // Ensure amount is a plain string
-      amount: String(request.amount).replace(/^"|"$/g, '')
+      // Ensure amount is a plain string and greater than zero
+      amount: parsedAmount.toString()
     };
     
     console.log('Clean request amount:', cleanRequest.amount);

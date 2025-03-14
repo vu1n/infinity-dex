@@ -93,10 +93,10 @@ export default async function handler(
         
         // Parse the amount as a number to avoid double-quoting issues
         const parsedAmount = parseFloat(amount);
-        if (isNaN(parsedAmount)) {
+        if (isNaN(parsedAmount) || parsedAmount <= 0) {
           return res.status(400).json({
             success: false,
-            error: 'Invalid amount: must be a number'
+            error: 'Invalid amount: must be a positive number greater than zero'
           });
         }
         
