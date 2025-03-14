@@ -86,10 +86,13 @@ export default async function handler(
           });
         }
         
+        // Parse the amount as a number to avoid double-quoting issues
+        const parsedAmount = parseFloat(amount).toString();
+        
         const temporalRequest: TemporalSwapRequest = {
           sourceToken: sourceTokenObj,
           destinationToken: destTokenObj,
-          amount: amount,
+          amount: parsedAmount, // Use the parsed amount
           sourceAddress: walletAddress,
           destinationAddress: walletAddress, // Using the same address for source and destination
           slippage: parseFloat(slippage || '0.5'),
