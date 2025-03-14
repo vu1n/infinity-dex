@@ -61,16 +61,16 @@ func SwapWorkflow(ctx workflow.Context, input SwapWorkflowInput) (*types.SwapRes
 
 	// Step 1: Calculate swap quote
 	var quote types.SwapQuote
-	err := workflow.ExecuteActivity(ctx, "CalculateFeeActivity", input.Request).Get(ctx, &quote.Fee)
-	if err != nil {
-		logger.Error("Failed to calculate fee", "error", err)
-		state.Status = "failed"
-		state.ErrorMessage = fmt.Sprintf("Failed to calculate fee: %v", err)
-		return createFailedResult(state), err
-	}
+	// err := workflow.ExecuteActivity(ctx, "CalculateFeeActivity", input.Request).Get(ctx, &quote.Fee)
+	// if err != nil {
+	// 	logger.Error("Failed to calculate fee", "error", err)
+	// 	state.Status = "failed"
+	// 	state.ErrorMessage = fmt.Sprintf("Failed to calculate fee: %v", err)
+	// 	return createFailedResult(state), err
+	// }
 
 	// Calculate output amount and other quote details
-	err = workflow.ExecuteActivity(ctx, "CalculateSwapQuoteActivity", input.Request).Get(ctx, &quote)
+	err := workflow.ExecuteActivity(ctx, "CalculateSwapQuoteActivity", input.Request).Get(ctx, &quote)
 	if err != nil {
 		logger.Error("Failed to calculate swap quote", "error", err)
 		state.Status = "failed"
