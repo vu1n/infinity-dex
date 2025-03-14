@@ -23,41 +23,10 @@ The Infinity DEX architecture combines:
 4. **Frontend UI**: User interface for trading and liquidity provision
 5. **Mock Services**: Development environment with simulated blockchain interactions
 
-## Directory Structure
-
-- `cmd/`: Command-line applications
-  - `server/`: API server
-- `db/`: Database schema and migrations
-- `frontend/`: Next.js frontend application
-  - `components/`: UI components including the enhanced SwapForm
-  - `pages/api/`: API routes with mock implementation support
-  - `services/`: Core frontend services including mockWorkflowState
-- `services/`: Core business logic services
-- `temporal/`: Temporal workflows, activities, and workers
-  - `activities/`: Temporal activity implementations
-  - `config/`: Configuration for Temporal components
-  - `workflows/`: Temporal workflow definitions
-  - `workers/`: Temporal worker implementations
-- `universalsdk/`: Universal.xyz SDK integration
-
-## Core Services
-
-Infinity DEX is built on a modular service architecture:
-
-- **TokenService**: Manages tokens and token pairs across multiple chains
-- **SwapService**: Handles token swap operations with quotes, execution, and status tracking
-- **LiquidityService**: Manages liquidity pools, positions, and statistics
-- **TransactionService**: Tracks and queries transactions with workflow support
-- **ChainService**: Handles blockchain operations and status monitoring
-- **ServiceFactory**: Centralizes management of all services
-- **MockWorkflowState**: Simulates workflow states for development and testing
-
 ## Project Structure
 
 ```
 infinity-dex/
-├── cmd/                # Command line applications
-│   └── server/         # API server
 ├── temporal/           # Temporal-related code
 │   ├── activities/     # Temporal activity implementations
 │   ├── config/         # Configuration for Temporal components
@@ -83,7 +52,7 @@ infinity-dex/
 - Go 1.18 or later
 - Node.js 16 or later
 - PostgreSQL 13 or later
-- Docker (optional, for containerized deployment)
+- Temporal 1.3 or later
 
 ### Quickstart Guide
 
@@ -195,15 +164,7 @@ make test
 - **Database connection errors**: Ensure PostgreSQL is running and the credentials in your `.env` file are correct.
 - **Missing dependencies**: Run `make init-dev` to install all required dependencies.
 - **Port conflicts**: If ports 3000 or 8080 are already in use, modify the configuration to use different ports.
-- **Temporal connection errors**: When not using mock mode, ensure Temporal server is running and accessible.
-
-### Development Workflow
-
-1. Make changes to the code
-2. Run tests: `make test`
-3. Format code: `make fmt`
-4. Run linter: `make lint`
-5. Build and run the application: `make start-dev`
+- **Temporal connection errors**: Ensure Temporal server is running and accessible.
 
 ## Development Progress
 
