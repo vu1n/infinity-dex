@@ -42,6 +42,9 @@ export type SwapRoute = {
 // Get the backend service URL from environment variables
 const SWAP_SERVICE_URL = process.env.SWAP_SERVICE_URL || 'http://localhost:8080';
 
+// Force mock swap to be true for development
+const USE_MOCK_SWAP = process.env.NODE_ENV === 'development' || process.env.USE_MOCK_SWAP === 'true';
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<SwapResponse>
@@ -72,8 +75,8 @@ export default async function handler(
     }
 
     // For testnet implementation or when using Temporal
-    if (process.env.NODE_ENV === 'development' || process.env.USE_MOCK_SWAP === 'true' || process.env.USE_TEMPORAL === 'true') {
-      console.log('Using Temporal workflow for swap');
+    if (USE_MOCK_SWAP || process.env.USE_TEMPORAL === 'true') {
+      console.log('Using mock or Temporal workflow for swap');
       
       try {
         // Convert the API request to a Temporal swap request
@@ -101,18 +104,26 @@ export default async function handler(
         console.log('Original amount:', amount);
         console.log('Clean amount:', cleanAmount);
         
-        const temporalRequest: TemporalSwapRequest = {
-          sourceToken: sourceTokenObj,
-          destinationToken: destTokenObj,
-          amount: cleanAmount, // Use the clean amount string
-          sourceAddress: walletAddress,
-          destinationAddress: walletAddress, // Using the same address for source and destination
-          slippage: parseFloat(slippage || '0.5'),
-          deadline: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 minutes from now
-        };
+        // Generate a unique workflow ID for mocking
+        let workflowId = `swap-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         
-        // Start the Temporal workflow
-        const workflowId = await startSwapWorkflow(temporalRequest);
+        // Only start the actual Temporal workflow if we're not using mock
+        if (!USE_MOCK_SWAP && process.env.USE_TEMPORAL === 'true') {
+          const temporalRequest: TemporalSwapRequest = {
+            sourceToken: sourceTokenObj,
+            destinationToken: destTokenObj,
+            amount: cleanAmount, // Use the clean amount string
+            sourceAddress: walletAddress,
+            destinationAddress: walletAddress, // Using the same address for source and destination
+            slippage: parseFloat(slippage || '0.5'),
+            deadline: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 minutes from now
+          };
+          
+          // Start the Temporal workflow
+          const actualWorkflowId = await startSwapWorkflow(temporalRequest);
+          // Use the actual workflow ID
+          workflowId = actualWorkflowId;
+        }
         
         // Create a mock swap route for UI display
         const isCrossChain = sourceChain !== destinationChain;
@@ -165,7 +176,7 @@ export default async function handler(
         }
         
         // Create initial workflow state for mocking
-        if (process.env.NODE_ENV === 'development' || process.env.USE_MOCK_SWAP === 'true') {
+        if (USE_MOCK_SWAP) {
           createWorkflowState(workflowId, cleanAmount);
         }
         
@@ -179,7 +190,7 @@ export default async function handler(
           }
         });
       } catch (error) {
-        console.error('Error starting Temporal workflow:', error);
+        console.error('Error starting swap workflow:', error);
         return res.status(500).json({
           success: false,
           error: error instanceof Error ? error.message : 'Failed to start swap workflow'
