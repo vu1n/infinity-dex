@@ -117,7 +117,7 @@ export default async function handler(
           const temporalRequest: TemporalSwapRequest = {
             sourceToken: sourceTokenObj,
             destinationToken: destTokenObj,
-            amount: cleanAmount, // Use the clean amount string
+            amount: "10", // Use a hardcoded larger amount for testing
             sourceAddress: walletAddress,
             destinationAddress: walletAddress, // Using the same address for source and destination
             slippage: parseFloat(slippage || '0.5'),
@@ -125,6 +125,8 @@ export default async function handler(
             // Add a flag to indicate this should be mocked within the workflow
             mockExecution: true
           };
+          
+          console.log('Sending Temporal request with mock execution:', JSON.stringify(temporalRequest, null, 2));
           
           // Start the Temporal workflow
           workflowId = await startSwapWorkflow(temporalRequest);

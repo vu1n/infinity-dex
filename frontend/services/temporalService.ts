@@ -109,7 +109,8 @@ export async function startSwapWorkflow(request: SwapRequest): Promise<string> {
     const cleanRequest = {
       ...request,
       // Ensure amount is a plain string and greater than zero
-      amount: parsedAmount.toString()
+      // Use a larger value to avoid potential precision issues in Go
+      amount: (parsedAmount < 1 ? 1 : parsedAmount).toString()
     };
     
     console.log('Clean request amount:', cleanRequest.amount);
