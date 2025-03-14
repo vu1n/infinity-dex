@@ -1,0 +1,93 @@
+ENVIRONMENT: "development"
+LOG_LEVEL: "info"
+
+TEMPORAL:
+  HOST_PORT: "localhost:7233"
+  NAMESPACE: "infinity-dex"
+  TASK_QUEUE: "dex-tasks"
+  WORKFLOW_TTL: "24h"
+
+UNIVERSAL:
+  API_URL: "https://api.universal.xyz"
+  API_KEY: ""  # Set via UNIVERSAL_API_KEY environment variable
+  MIN_TOKEN_WRAP: "0.01"
+
+CHAINS:
+  ethereum:
+    NAME: "Ethereum"
+    RPC: 
+      - "https://mainnet.infura.io/v3/${INFURA_KEY}"
+    CHAIN_ID: 1
+    EXPLORER_URL: "https://etherscan.io"
+    UNIVERSAL_ADDRESS: ""  # Set contract addresses in production
+    DEX_ADDRESS: ""
+    WRAPPED_TOKENS:
+      - "uETH"
+      - "uUSDC"
+      - "uUSDT"
+      - "uDAI"
+  
+  polygon:
+    NAME: "Polygon"
+    RPC:
+      - "https://polygon-rpc.com"
+    CHAIN_ID: 137
+    EXPLORER_URL: "https://polygonscan.com"
+    UNIVERSAL_ADDRESS: ""
+    DEX_ADDRESS: ""
+    WRAPPED_TOKENS:
+      - "uMATIC"
+      - "uUSDC"
+      - "uUSDT"
+      - "uDAI"
+  
+  solana:
+    NAME: "Solana"
+    RPC:
+      - "https://api.mainnet-beta.solana.com"
+    CHAIN_ID: 0  # Not applicable for Solana
+    EXPLORER_URL: "https://explorer.solana.com"
+    UNIVERSAL_ADDRESS: ""
+    DEX_ADDRESS: ""
+    WRAPPED_TOKENS:
+      - "uSOL"
+      - "uUSDC"
+      - "uUSDT"
+  
+  avalanche:
+    NAME: "Avalanche"
+    RPC:
+      - "https://api.avax.network/ext/bc/C/rpc"
+    CHAIN_ID: 43114
+    EXPLORER_URL: "https://snowtrace.io"
+    UNIVERSAL_ADDRESS: ""
+    DEX_ADDRESS: ""
+    WRAPPED_TOKENS:
+      - "uAVAX"
+      - "uUSDC"
+      - "uUSDT"
+      - "uDAI"
+  
+  binance:
+    NAME: "Binance Smart Chain"
+    RPC:
+      - "https://bsc-dataseed.binance.org"
+    CHAIN_ID: 56
+    EXPLORER_URL: "https://bscscan.com"
+    UNIVERSAL_ADDRESS: ""
+    DEX_ADDRESS: ""
+    WRAPPED_TOKENS:
+      - "uBNB"
+      - "uUSDC"
+      - "uUSDT"
+      - "uBUSD"
+
+SERVER:
+  PORT: 8080
+  CORS_ALLOW_ORIGIN: "*"
+  TIMEOUT: "30s"
+
+SWAP:
+  DEFAULT_SLIPPAGE: 0.5
+  MAX_SWAP_AMOUNT: "100000"
+  MAX_SWAP_TIME: "30s" 

@@ -9,9 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/infinity-dex/config"
 	"github.com/infinity-dex/services/types"
 	temporal_activities "github.com/infinity-dex/temporal/activities"
+	temporal_config "github.com/infinity-dex/temporal/config"
 	temporal_workflows "github.com/infinity-dex/temporal/workflows"
 	"github.com/infinity-dex/universalsdk"
 	"go.temporal.io/sdk/client"
@@ -55,8 +55,8 @@ func RunPriceWorker() {
 	cacheDir := filepath.Join(homeDir, ".infinity-dex", "price-cache")
 
 	// Initialize database connection
-	dbConfig := config.DefaultDBConfig()
-	dbPool, err := config.NewDBPool(dbConfig)
+	dbConfig := temporal_config.DefaultDBConfig()
+	dbPool, err := temporal_config.NewDBPool(dbConfig)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -64,7 +64,7 @@ func RunPriceWorker() {
 
 	// Initialize database schema
 	schemaPath := filepath.Join("db", "schema.sql")
-	if err := config.InitDatabase(dbPool, schemaPath); err != nil {
+	if err := temporal_config.InitDatabase(dbPool, schemaPath); err != nil {
 		log.Fatalf("Failed to initialize database schema: %v", err)
 	}
 
