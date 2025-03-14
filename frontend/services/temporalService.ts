@@ -13,6 +13,7 @@ export interface SwapRequest {
   deadline: string; // ISO date string
   refundAddress?: string;
   requestID?: string;
+  mockExecution?: boolean; // Flag to indicate if the workflow should mock execution
 }
 
 // Define the SwapQuote type to match the Go type
