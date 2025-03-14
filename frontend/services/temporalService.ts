@@ -97,16 +97,28 @@ export async function startSwapWorkflow(request: SwapRequest): Promise<string> {
     // Log the original amount for debugging
     console.log('Original amount:', request.amount);
     
+    // Convert the amount to an integer value based on token decimals
+    // Go's big.Int can only handle integer values, not decimals
+    const parsedAmount = parseFloat(request.amount);
+    if (isNaN(parsedAmount)) {
+      throw new Error('Invalid amount: must be a number');
+    }
+    
+    // Get the token decimals (e.g., 18 for ETH, 9 for SOL)
+    const decimals = request.sourceToken.decimals;
+    
+    // Convert to integer by multiplying by 10^decimals
+    // For example, 1.5 ETH becomes 1500000000000000000 (1.5 * 10^18)
+    const amountInSmallestUnit = Math.floor(parsedAmount * Math.pow(10, decimals)).toString();
+    
+    console.log(`Converting ${parsedAmount} ${request.sourceToken.symbol} to ${amountInSmallestUnit} (smallest unit)`);
+    
     // Create a clean copy of the request
-    // IMPORTANT: We need to ensure the amount is a plain string without extra quotes
-    // Go's big.Int expects a plain string like "1", not a JSON string like "\"1\""
     const cleanRequest = {
       ...request,
-      // Ensure amount is a plain string
-      amount: String(request.amount).replace(/^"|"$/g, '')
+      // Use the integer amount
+      amount: amountInSmallestUnit
     };
-    
-    console.log('Clean request amount:', cleanRequest.amount);
     
     // Create the input object that matches the Go SwapWorkflowInput struct
     const workflowInput: SwapWorkflowInput = {
