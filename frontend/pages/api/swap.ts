@@ -81,14 +81,29 @@ export default async function handler(
       
       try {
         // Convert the API request to a Temporal swap request
-        const sourceTokenObj = await fetchTokenDetails(sourceToken, sourceChain);
-        const destTokenObj = await fetchTokenDetails(destinationToken, destinationChain);
+        let sourceTokenObj = await fetchTokenDetails(sourceToken, sourceChain);
+        let destTokenObj = await fetchTokenDetails(destinationToken, destinationChain);
         
         if (!sourceTokenObj || !destTokenObj) {
           return res.status(400).json({
             success: false,
             error: 'Invalid token details'
           });
+        }
+        
+        // Ensure chainId is a number, not a string
+        if (typeof sourceTokenObj.chainId === 'string') {
+          sourceTokenObj = {
+            ...sourceTokenObj,
+            chainId: parseInt(sourceTokenObj.chainId, 10)
+          };
+        }
+        
+        if (typeof destTokenObj.chainId === 'string') {
+          destTokenObj = {
+            ...destTokenObj,
+            chainId: parseInt(destTokenObj.chainId, 10)
+          };
         }
         
         // Parse the amount as a number to avoid double-quoting issues
@@ -246,6 +261,10 @@ async function fetchTokenDetails(symbol: string, chainName: string) {
       );
       
       if (token) {
+        // Ensure chainId is a number
+        if (typeof token.chainId === 'string') {
+          token.chainId = parseInt(token.chainId, 10);
+        }
         return token;
       }
     }
