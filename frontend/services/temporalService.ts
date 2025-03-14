@@ -107,14 +107,19 @@ export async function startSwapWorkflow(request: SwapRequest): Promise<string> {
     };
     
     console.log('Clean request amount:', cleanRequest.amount);
-    console.log('Full clean request:', JSON.stringify(cleanRequest, null, 2));
+    
+    // Create the input object that matches the Go SwapWorkflowInput struct
+    const workflowInput: SwapWorkflowInput = {
+      request: cleanRequest
+    };
+    
+    console.log('Full workflow input:', JSON.stringify(workflowInput, null, 2));
     
     const client = await getTemporalClient();
     
-    // Start the workflow with the clean request
-    // We'll use a direct object instead of wrapping it in another object
+    // Start the workflow with the properly structured input
     const handle = await client.workflow.start('SwapWorkflow', {
-      args: [cleanRequest], // Send the request directly, not wrapped in {request: cleanRequest}
+      args: [workflowInput], // Send the wrapped request as expected by Go
       taskQueue: 'swap-queue',
       workflowId: `swap-${request.requestID}`,
     });
