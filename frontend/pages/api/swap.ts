@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import axios from 'axios';
 import { startSwapWorkflow, SwapRequest as TemporalSwapRequest } from '../../services/temporalService';
+import { createWorkflowState } from '../../services/mockWorkflowState';
 
 // Define the response type
 type SwapResponse = {
@@ -150,6 +151,11 @@ export default async function handler(
             fromChain: sourceChain,
             toChain: destinationChain
           });
+        }
+        
+        // Create initial workflow state for mocking
+        if (process.env.NODE_ENV === 'development' || process.env.USE_MOCK_SWAP === 'true') {
+          createWorkflowState(workflowId, parsedAmount);
         }
         
         // Return response with workflow ID
