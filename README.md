@@ -24,12 +24,12 @@ The Infinity DEX architecture combines:
 
 - `cmd/`: Command-line applications
   - `server/`: API server
-- `config/`: Configuration management
 - `db/`: Database schema and migrations
 - `frontend/`: Next.js frontend application
 - `services/`: Core business logic services
 - `temporal/`: Temporal workflows, activities, and workers
   - `activities/`: Temporal activity implementations
+  - `config/`: Configuration for Temporal components
   - `workflows/`: Temporal workflow definitions
   - `workers/`: Temporal worker implementations
 - `universalsdk/`: Universal.xyz SDK integration
@@ -52,11 +52,12 @@ infinity-dex/
 ├── cmd/                # Command line applications
 │   └── server/         # API server
 ├── temporal/           # Temporal-related code
-│   ├── workflows/      # Temporal workflow definitions
 │   ├── activities/     # Temporal activity implementations
+│   ├── config/         # Configuration for Temporal components
+│   ├── workflows/      # Temporal workflow definitions
 │   └── workers/        # Temporal worker implementations
 ├── universalsdk/       # Integration with Universal.xyz
-├── config/             # Configuration files
+├── db/                 # Database schema and migrations
 ├── services/           # Core business logic services
 │   ├── types/          # Common type definitions
 │   └── interfaces/     # Service interfaces
